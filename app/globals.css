@@ -46,75 +46,84 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+  /* Gold colour tokens exposed to Tailwind as bg-gold / text-gold etc. */
+  --color-gold: var(--gold);
+  --color-gold-muted: var(--gold-muted);
+  /* Shadow tokens */
+  --shadow-card: var(--shadow-card);
+  --shadow-card-hover: var(--shadow-card-hover);
+  --shadow-dock: var(--shadow-dock);
+  --shadow-fab: var(--shadow-fab);
 }
+
+/* Brand: Kish Home Services Detailing
+   Theme:  Clean minimal — white/light bg, dark text, teal accent
+   Reference: Modern mobile app aesthetic (rounded, airy, soft shadows)
+   Added:  2026-05-21 */
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-}
+  /* SaaS Accent Color — Cyan/Pastel Blue from ShineBAY */
+  --gold: oklch(75% 0.15 190); /* #4FD1D9 approximate */
+  --gold-muted: oklch(70% 0.12 190);
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  /* Modern SaaS White Theme */
+  --background: oklch(100% 0 0); 
+  --foreground: oklch(12% 0.005 247);
+
+  --card: oklch(100% 0 0);
+  --card-foreground: oklch(12% 0.005 247);
+
+  --popover: oklch(100% 0 0);
+  --popover-foreground: oklch(12% 0.005 247);
+
+  --primary: oklch(12% 0 0); /* Still black for high contrast */
+  --primary-foreground: oklch(100% 0 0);
+
+  --secondary: oklch(97% 0.005 247);
+  --secondary-foreground: oklch(12% 0.005 247);
+
+  --muted: oklch(97% 0.005 247);
+  --muted-foreground: oklch(45% 0.005 247); /* Secondary/body text */
+
+  --accent: oklch(75% 0.15 190); /* Cyan accent */
+  --accent-foreground: oklch(12% 0.005 247);
+
+  --destructive: oklch(60% 0.2 25);
+
+  --border: oklch(94% 0.005 247);
+  --input: oklch(97% 0.005 247);
+  --ring: oklch(75% 0.15 190 / 30%);
+
+  /* SaaS Border Radius — slightly more geometric but still soft */
+  --radius: 0.75rem;
+
+  /* SaaS Shadows */
+  --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+  --shadow-card-hover: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  --shadow-dock: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  --shadow-fab: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+
+  /* Sidebar */
+  --sidebar: oklch(100% 0 0);
+  --sidebar-foreground: oklch(12% 0 0);
+  --sidebar-primary: oklch(12% 0 0);
+  --sidebar-primary-foreground: oklch(100% 0 0);
+  --sidebar-accent: oklch(97% 0 0);
+  --sidebar-accent-foreground: oklch(12% 0 0);
+  --sidebar-border: oklch(94% 0 0);
+  --sidebar-ring: oklch(75% 0.15 190 / 40%);
+
+  /* Status */
+  --status-pending: oklch(80% 0.12 85);
+  --status-confirmed: oklch(65% 0.15 230);
+  --status-on-the-way: oklch(65% 0.15 290);
+  --status-completed: oklch(65% 0.15 160);
+  --status-cancelled: oklch(50% 0 0);
+  --status-declined: oklch(60% 0.2 25);
+
+  --card-tint-peach: #FDF3EC; 
+  --card-tint-mint: #E9F5F3; 
+  --card-tint-lavender: #EAEBF9; 
 }
 
 @layer base {

@@ -1,7 +1,7 @@
 ---
 description: "Use when building API routes, services, validation schemas, database logic, or any backend feature for Kish Auto Detailing Services. Triggered by: API route, service function, Zod schema, Supabase query, server action, booking logic, status transition, email, auth, middleware."
 tools: [read, edit, search, execute]
-name: "Backend"
+name: "Kish Backend"
 argument-hint: "Describe the backend feature to build (e.g. 'booking creation API route' or 'updateBookingStatus service function')"
 ---
 

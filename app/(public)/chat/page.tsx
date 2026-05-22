@@ -1,3 +1,4 @@
+import { ChatWidget } from "@/components/chat/ChatWidget";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -7,13 +8,14 @@ export const metadata: Metadata = {
 
 export default function ChatPage() {
   return (
-    <main className="flex flex-col items-center px-4 py-8 md:py-16">
-      <div className="w-full max-w-2xl space-y-6">
+    <main className="px-4 py-6 md:py-10 max-w-2xl mx-auto w-full">
+      <div className="mb-5">
         <h1 className="text-2xl font-bold md:text-3xl">Chat with Us</h1>
-        <p className="text-muted-foreground">
-          Chatbot widget will be implemented here.
+        <p className="text-sm text-muted-foreground mt-1">
+          Get instant answers about our services, pricing, and availability.
         </p>
       </div>
+      <ChatWidget />
     </main>
   );
 }

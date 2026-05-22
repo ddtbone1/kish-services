@@ -1,8 +1,4 @@
-import type {
-  BookingStatus,
-  EmailNotificationType,
-  EmailStatus,
-} from "@/lib/constants/booking";
+import type { BookingStatus } from "@/lib/constants/booking";
 
 // ─── Services ────────────────────────────────────────────────────────────────
 
@@ -42,7 +38,7 @@ export interface AvailabilityTemplate {
 export interface Booking {
   id: string;
   reference_token: string;
-  service_id: string;
+  // security: service_id removed — bookings now support multiple services via booking_items
   slot_id: string;
   customer_name: string;
   customer_email: string;
@@ -63,6 +59,68 @@ export interface Booking {
 /** Booking fields safe to return in public-facing routes (no owner_notes) */
 export type PublicBooking = Omit<Booking, "owner_notes">;
 
+/** A service/package line item within a booking — price is snapshotted at booking time */
+export interface BookingItem {
+  id: string;
+  booking_id: string;
+  service_id: string;
+  price_at_booking: number;
+  // Joined field when fetched with service data
+  service?: Service;
+}
+
+/** An optional add-on that can be selected on top of base packages */
+export interface AddOn {
+  id: string;
+  name: string;
+  description: string | null;
+  price: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/** An add-on line item within a booking — price is snapshotted at booking time */
+export interface BookingAddOn {
+  id: string;
+  booking_id: string;
+  add_on_id: string;
+  price_at_booking: number;
+  // Joined field when fetched with add-on data
+  add_on?: AddOn;
+}
+
+/** Full booking with all line items — used in dashboard detail view */
+export interface BookingWithItems extends PublicBooking {
+  booking_items: BookingItem[];
+  booking_add_ons: BookingAddOn[];
+}
+
+/** Full booking including owner_notes and joined slot — owner dashboard only */
+export interface OwnerBookingDetail extends Booking {
+  booking_items: BookingItem[];
+  booking_add_ons: BookingAddOn[];
+  slot: Pick<
+    AvailabilitySlot,
+    "id" | "date" | "start_time" | "end_time"
+  > | null;
+}
+
+/** Slim booking row for the owner dashboard list */
+export interface BookingListItem {
+  id: string;
+  reference_token: string;
+  customer_name: string;
+  city: string;
+  status: BookingStatus;
+  created_at: string;
+  booking_items: Array<{
+    price_at_booking: number;
+    service: { name: string } | null;
+  }>;
+  slot: { date: string; start_time: string } | null;
+}
+
 // ─── FAQ ─────────────────────────────────────────────────────────────────────
 
 export interface FaqEntry {
@@ -74,42 +132,3 @@ export interface FaqEntry {
   created_at: string;
   updated_at: string;
 }
-
-// ─── Chat ────────────────────────────────────────────────────────────────────
-
-export interface ChatSession {
-  id: string;
-  session_id: string;
-  question: string;
-  answer: string;
-  matched_faq_id: string | null;
-  confidence_score: number | null;
-  was_escalated: boolean;
-  created_at: string;
-}
-
-// ─── Email Notifications ─────────────────────────────────────────────────────
-
-export interface EmailNotification {
-  id: string;
-  booking_id: string;
-  recipient_email: string;
-  type: EmailNotificationType;
-  provider_message_id: string | null;
-  status: EmailStatus;
-  error_message: string | null;
-  sent_at: string;
-}
-
-// ─── API Response Shapes ─────────────────────────────────────────────────────
-
-export interface ApiSuccessResponse<T> {
-  data: T;
-}
-
-export interface ApiErrorResponse {
-  error: string;
-  details?: unknown;
-}
-
-export type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse;

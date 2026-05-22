@@ -204,3 +204,15 @@ CREATE TRIGGER trg_bookings_updated_at
 CREATE TRIGGER trg_faq_entries_updated_at
   BEFORE UPDATE ON faq_entries
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ─── Table-level Grants ───────────────────────────────────────────────────────
+-- RLS policies require the underlying GRANT to be present for the anon role.
+
+GRANT SELECT ON public.services         TO anon;
+GRANT SELECT ON public.add_ons          TO anon;
+GRANT SELECT ON public.faq_entries      TO anon;
+GRANT SELECT ON public.bookings         TO anon;
+GRANT INSERT ON public.bookings         TO anon;
+
+-- NOTE: booking_items and booking_add_ons are created in migration 001.
+-- Their GRANT statements live there, after the tables are defined.

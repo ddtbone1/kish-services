@@ -1,3 +1,5 @@
+import { ScheduleCalendar } from "@/components/dashboard/ScheduleCalendar";
+import { WeeklyTemplatePanel } from "@/components/dashboard/WeeklyTemplatePanel";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -6,11 +8,10 @@ export const metadata: Metadata = {
 
 export default function SchedulePage() {
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-bold md:text-3xl">Schedule</h1>
-      <p className="text-muted-foreground">
-        Availability slot management will be rendered here.
-      </p>
+      <ScheduleCalendar />
+      <WeeklyTemplatePanel />
     </div>
   );
 }

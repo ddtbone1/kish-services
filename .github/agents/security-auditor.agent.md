@@ -1,7 +1,7 @@
 ---
 description: "Run a full security audit on Kish Auto Detailing. Use when: reviewing auth flows, checking RLS policies, auditing API validation, checking for exposed secrets, reviewing booking abuse vectors, pre-deployment security review."
 tools: [read, search]
-name: "Security Auditor"
+name: "Kish Security Auditor"
 argument-hint: "Scope: 'full audit', or a specific domain like 'auth', 'RLS', 'API validation', 'booking abuse'"
 ---
 

@@ -39,17 +39,17 @@ export const VALID_STATUS_TRANSITIONS: Record<BookingStatus, BookingStatus[]> =
 export const EMAIL_NOTIFICATION_TYPE = {
   BOOKING_CONFIRMATION: "booking_confirmation",
   BOOKING_CONFIRMED: "booking_confirmed",
+  BOOKING_ON_THE_WAY: "booking_on_the_way",
+  BOOKING_COMPLETED: "booking_completed",
   BOOKING_CANCELLED: "booking_cancelled",
   BOOKING_DECLINED: "booking_declined",
   BOOKING_REMINDER: "booking_reminder",
+  /** Internal alert sent to the business owner when a new booking is created. */
+  ADMIN_BOOKING_ALERT: "admin_booking_alert",
 } as const;
 
 export type EmailNotificationType =
   (typeof EMAIL_NOTIFICATION_TYPE)[keyof typeof EMAIL_NOTIFICATION_TYPE];
-
-export const EMAIL_NOTIFICATION_TYPE_VALUES = Object.values(
-  EMAIL_NOTIFICATION_TYPE,
-) as [EmailNotificationType, ...EmailNotificationType[]];
 
 export const EMAIL_STATUS = {
   SENT: "sent",

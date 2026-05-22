@@ -1,0 +1,18 @@
+{
+  // This is a PostgreSQL / Supabase project. The ms-mssql extension family
+  // (mssql, sql-database-projects, data-workspace) each bundle their own
+  // T-SQL language server and all activate on *.sql files, producing hundreds
+  // of false-positive T-SQL parse errors against PostgreSQL syntax (RLS,
+  // plpgsql, $$-quoting, TIMESTAMPTZ, ON CONFLICT, etc.).
+  //
+  // Two-pronged fix:
+  //   1. Disable mssql IntelliSense/error-checking (kills the core provider).
+  //   2. Associate migration and script SQL files with "plaintext" so the
+  //      sql-database-projects and data-workspace language servers skip them
+  //      (they only activate for documents with language ID "sql").
+  "mssql.intelliSense.enableIntelliSense": false,
+  "mssql.intelliSense.enableErrorChecking": false,
+  "files.associations": {
+    "**/*.sql": "plaintext"
+  }
+}

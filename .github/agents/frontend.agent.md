@@ -1,7 +1,7 @@
 ---
 description: "Use when building UI components, pages, layouts, or any frontend feature for Kish Auto Detailing Services. Triggered by: build component, create page, implement UI, frontend feature, booking form, dashboard view, mobile layout, shadcn, Tailwind."
 tools: [read, edit, search]
-name: "Frontend"
+name: "Kish Frontend"
 argument-hint: "Describe the UI feature or component to build (e.g. 'booking form page' or 'status badge component')"
 ---
 

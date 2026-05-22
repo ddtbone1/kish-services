@@ -11,7 +11,8 @@ You NEVER invent information — all documentation must reflect actual implement
 ## Project Context
 
 - Docs live in `/Docs/` at the project root
-- Planning document: `Docs/PLANNING-PHASE.md` — source of truth for architecture decisions
+- Architecture reference: `Docs/ARCHITECTURE.md` — **source of truth** for all agents and contributors
+- Planning document: `Docs/PLANNING-PHASE.md` — original project brief and requirements; not a live tracker
 - Stack: Next.js App Router, TypeScript, Supabase PostgreSQL, Tailwind, shadcn/ui
 
 ## Trigger Conditions

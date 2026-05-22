@@ -1,36 +1,86 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Kish Auto Detailing Services
 
-## Getting Started
+Web-based booking platform for Kish Auto Detailing Services — a mobile auto detailing business in General Santos City, Philippines.
 
-First, run the development server:
+**Stack:** Next.js 16 App Router · TypeScript · Supabase PostgreSQL · Tailwind CSS · shadcn/ui · Resend · Google Gemini
+
+---
+
+## Requirements
+
+Before you can run this project, you need the following ready:
+
+### Tools (install on the new device)
+
+| Tool    | Min version | Check     |
+| ------- | ----------- | --------- |
+| Node.js | 20          | `node -v` |
+| npm     | 10          | `npm -v`  |
+
+> Tip: Use [nvm](https://github.com/nvm-sh/nvm) — a `.nvmrc` file is included. Run `nvm install` then `nvm use` to get the right version.
+
+### External accounts (must exist before filling in env vars)
+
+| Service           | Purpose             | Where to get keys              |
+| ----------------- | ------------------- | ------------------------------ |
+| **Supabase**      | Database + Auth     | Project Settings → API         |
+| **Resend**        | Transactional email | resend.com → API Keys          |
+| **Google Gemini** | AI chatbot          | aistudio.google.com → API keys |
+
+> For a **new device on an existing project**, request the `.env.local` values from the project owner — you do not need to create new accounts.
+
+---
+
+## Local Setup
+
+### 1. Clone and install dependencies
+
+```bash
+git clone <repo-url> kish
+cd kish
+npm install
+```
+
+### 2. Configure environment variables
+
+```bash
+cp .env.example .env.local
+```
+
+Open `.env.local` and fill in every value. The required variables are:
+
+| Variable                            | Required | Description                                          |
+| ----------------------------------- | -------- | ---------------------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`          | YES      | Supabase project API URL                             |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY`     | YES      | Supabase anon/public key                             |
+| `SUPABASE_SERVICE_ROLE_KEY`         | YES      | Supabase service role key (server-only)              |
+| `GEMINI_API_KEY`                    | YES      | Google Gemini API key for chatbot                    |
+| `RESEND_API_KEY`                    | YES      | Resend API key for emails                            |
+| `ADMIN_EMAIL`                       | YES      | Owner email — receives chatbot escalation alerts     |
+| `NEXT_PUBLIC_APP_URL`               | NO       | Deployed app URL (defaults to http://localhost:3000) |
+| `NEXT_PUBLIC_GOOGLE_MAPS_EMBED_URL` | NO       | Google Maps embed URL for the Location page          |
+
+### 3. Start the development server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Available Scripts
 
-## Learn More
+| Command         | Description                          |
+| --------------- | ------------------------------------ |
+| `npm run dev`   | Start the dev server with hot reload |
+| `npm run build` | Build for production                 |
+| `npm start`     | Run the production build             |
+| `npm run lint`  | Run ESLint                           |
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Project Structure
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+See [Docs/ARCHITECTURE.md](Docs/ARCHITECTURE.md) for the full architecture reference, database schema, and folder structure.

@@ -50,7 +50,7 @@ Every feature MUST include ALL of the following — never partial:
 
 - `owner_notes` must NEVER appear in public API responses or customer-facing components
 - `lib/supabase/admin.ts` must NEVER be imported in client components (`"use client"`)
-- `SUPABASE_SERVICE_ROLE_KEY` and `RESEND_API_KEY` must NEVER be in `NEXT_PUBLIC_` variables
+- `SUPABASE_SERVICE_ROLE_KEY`, `SMTP_PASS`, and `GEMINI_API_KEY` must NEVER be in `NEXT_PUBLIC_` variables
 - Every POST/PATCH API route must call `schema.safeParse()` before any service call
 - `reference_token` must always be `crypto.randomUUID()` — never sequential or predictable
 - Status transitions must always be validated against `VALID_STATUS_TRANSITIONS` before DB write

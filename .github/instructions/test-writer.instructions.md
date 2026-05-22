@@ -31,6 +31,13 @@ For every function in `lib/services/`:
 - Error path — Supabase error propagates correctly as `{ data: null, error: string }`
 - Boundary conditions — empty results, null fields, duplicate inserts
 
+**`availability.service.ts` template functions** — test all four:
+
+- `getTemplates()` — returns ordered list; handles empty result
+- `createTemplate(input)` — happy path + Supabase error
+- `deleteTemplate(id)` — happy path + Supabase error
+- `generateSlotsFromTemplates(input)` — returns inserted row count; handles rpc error
+
 ### Status Transition Logic (Priority 1)
 
 `updateBookingStatus` in `booking.service.ts` is critical — test every transition:
@@ -57,9 +64,10 @@ For every Zod schema in `lib/validations/`:
 ## Mocking Strategy
 
 - Mock Supabase client using `vi.mock('@/lib/supabase/server')`
-- Mock `@/lib/supabase/admin` separately — it's used for email logging and chat sessions
-- Never hit a real database in unit tests
-- Use `vi.spyOn` for email service to verify it's called without actually sending
+- Mock `@/lib/supabase/admin` separately — it's used for booking creation, token reads, chat logging, and email logging
+- Mock nodemailer transport: `vi.mock('nodemailer')` and stub `createTransport` to return `{ sendMail: vi.fn() }`
+- Never hit a real database or send real emails in unit tests
+- Use `vi.spyOn` on email service functions to verify they're called without executing transport
 
 ## Test Structure Template
 

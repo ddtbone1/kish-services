@@ -1,0 +1,325 @@
+// Feature: Availability
+// Purpose: Unit tests for availability service — slots and template functions
+// Added: 2026-05-22
+
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// ─── Supabase mock ────────────────────────────────────────────────────────────
+
+const mockSelect = vi.fn();
+const mockInsert = vi.fn();
+const mockUpdate = vi.fn();
+const mockDelete = vi.fn();
+const mockRpc = vi.fn();
+const mockSingle = vi.fn();
+const mockEq = vi.fn();
+const mockGte = vi.fn();
+const mockLte = vi.fn();
+const mockOrder = vi.fn();
+
+// Build a chainable query builder mock
+function makeQueryChain(finalResult: unknown) {
+  const chain: Record<string, unknown> = {};
+  const methods = [
+    "select",
+    "insert",
+    "update",
+    "delete",
+    "eq",
+    "gte",
+    "lte",
+    "order",
+    "single",
+  ];
+  methods.forEach((m) => {
+    chain[m] = vi.fn().mockReturnValue(chain);
+  });
+  // The last call resolves the promise
+  (chain.single as ReturnType<typeof vi.fn>).mockResolvedValue(finalResult);
+  (chain.order as ReturnType<typeof vi.fn>).mockResolvedValue(finalResult);
+  return chain;
+}
+
+vi.mock("@/lib/supabase/server", () => ({
+  createClient: vi.fn(),
+}));
+
+// Import after mock is declared
+import { createClient } from "@/lib/supabase/server";
+
+import {
+  createTemplate,
+  deleteTemplate,
+  generateSlotsFromTemplates,
+  getAvailableSlots,
+  getTemplates,
+} from "./availability.service";
+
+const mockCreateClient = vi.mocked(createClient);
+
+// ─── getAvailableSlots ────────────────────────────────────────────────────────
+
+describe("getAvailableSlots", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("returns available slots for a given date", async () => {
+    const fakeSlots = [
+      {
+        id: "slot-1",
+        date: "2026-06-01",
+        start_time: "09:00:00",
+        end_time: "10:00:00",
+        is_blocked: false,
+      },
+    ];
+
+    const orderMock = vi
+      .fn()
+      .mockResolvedValue({ data: fakeSlots, error: null });
+    const eqBlockedMock = vi.fn().mockReturnValue({ order: orderMock });
+    const eqDateMock = vi.fn().mockReturnValue({ eq: eqBlockedMock });
+    const selectMock = vi.fn().mockReturnValue({ eq: eqDateMock });
+
+    mockCreateClient.mockResolvedValue({
+      from: vi.fn().mockReturnValue({ select: selectMock }),
+    } as any);
+
+    const result = await getAvailableSlots("2026-06-01");
+
+    expect(result.data).toEqual(fakeSlots);
+    expect(result.error).toBeNull();
+  });
+
+  it("returns error when Supabase fails", async () => {
+    const orderMock = vi
+      .fn()
+      .mockResolvedValue({ data: null, error: { message: "DB error" } });
+    const eqBlockedMock = vi.fn().mockReturnValue({ order: orderMock });
+    const eqDateMock = vi.fn().mockReturnValue({ eq: eqBlockedMock });
+    const selectMock = vi.fn().mockReturnValue({ eq: eqDateMock });
+
+    mockCreateClient.mockResolvedValue({
+      from: vi.fn().mockReturnValue({ select: selectMock }),
+    } as any);
+
+    const result = await getAvailableSlots("2026-06-01");
+
+    expect(result.data).toBeNull();
+    expect(result.error).toBe("DB error");
+  });
+
+  it("returns empty array when no slots exist for a date", async () => {
+    const orderMock = vi.fn().mockResolvedValue({ data: [], error: null });
+    const eqBlockedMock = vi.fn().mockReturnValue({ order: orderMock });
+    const eqDateMock = vi.fn().mockReturnValue({ eq: eqBlockedMock });
+    const selectMock = vi.fn().mockReturnValue({ eq: eqDateMock });
+
+    mockCreateClient.mockResolvedValue({
+      from: vi.fn().mockReturnValue({ select: selectMock }),
+    } as any);
+
+    const result = await getAvailableSlots("2026-06-01");
+
+    expect(result.data).toEqual([]);
+    expect(result.error).toBeNull();
+  });
+});
+
+// ─── getTemplates ─────────────────────────────────────────────────────────────
+
+describe("getTemplates", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("returns templates ordered by day_of_week", async () => {
+    const fakeTemplates = [
+      {
+        id: "t-1",
+        day_of_week: 1,
+        start_time: "08:00",
+        end_time: "17:00",
+        slot_duration_minutes: 60,
+        is_active: true,
+      },
+      {
+        id: "t-2",
+        day_of_week: 2,
+        start_time: "08:00",
+        end_time: "17:00",
+        slot_duration_minutes: 60,
+        is_active: true,
+      },
+    ];
+
+    const orderStartMock = vi
+      .fn()
+      .mockResolvedValue({ data: fakeTemplates, error: null });
+    const orderDayMock = vi.fn().mockReturnValue({ order: orderStartMock });
+    const selectMock = vi.fn().mockReturnValue({ order: orderDayMock });
+
+    mockCreateClient.mockResolvedValue({
+      from: vi.fn().mockReturnValue({ select: selectMock }),
+    } as any);
+
+    const result = await getTemplates();
+
+    expect(result.data).toEqual(fakeTemplates);
+    expect(result.error).toBeNull();
+  });
+
+  it("propagates Supabase error", async () => {
+    const orderStartMock = vi
+      .fn()
+      .mockResolvedValue({ data: null, error: { message: "fetch failed" } });
+    const orderDayMock = vi.fn().mockReturnValue({ order: orderStartMock });
+    const selectMock = vi.fn().mockReturnValue({ order: orderDayMock });
+
+    mockCreateClient.mockResolvedValue({
+      from: vi.fn().mockReturnValue({ select: selectMock }),
+    } as any);
+
+    const result = await getTemplates();
+
+    expect(result.data).toBeNull();
+    expect(result.error).toBe("fetch failed");
+  });
+});
+
+// ─── createTemplate ───────────────────────────────────────────────────────────
+
+describe("createTemplate", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("returns the new template on success", async () => {
+    const newTemplate = {
+      id: "t-new",
+      day_of_week: 3,
+      start_time: "09:00",
+      end_time: "13:00",
+      slot_duration_minutes: 60,
+      is_active: true,
+    };
+
+    const singleMock = vi
+      .fn()
+      .mockResolvedValue({ data: newTemplate, error: null });
+    const selectMock = vi.fn().mockReturnValue({ single: singleMock });
+    const insertMock = vi.fn().mockReturnValue({ select: selectMock });
+
+    mockCreateClient.mockResolvedValue({
+      from: vi.fn().mockReturnValue({ insert: insertMock }),
+    } as any);
+
+    const result = await createTemplate({
+      day_of_week: 3,
+      start_time: "09:00",
+      end_time: "13:00",
+      slot_duration_minutes: 60,
+      is_active: true,
+    });
+
+    expect(result.data).toEqual(newTemplate);
+    expect(result.error).toBeNull();
+  });
+
+  it("returns error when insert fails", async () => {
+    const singleMock = vi
+      .fn()
+      .mockResolvedValue({ data: null, error: { message: "duplicate key" } });
+    const selectMock = vi.fn().mockReturnValue({ single: singleMock });
+    const insertMock = vi.fn().mockReturnValue({ select: selectMock });
+
+    mockCreateClient.mockResolvedValue({
+      from: vi.fn().mockReturnValue({ insert: insertMock }),
+    } as any);
+
+    const result = await createTemplate({
+      day_of_week: 3,
+      start_time: "09:00",
+      end_time: "13:00",
+      slot_duration_minutes: 60,
+      is_active: true,
+    });
+
+    expect(result.data).toBeNull();
+    expect(result.error).toBe("duplicate key");
+  });
+});
+
+// ─── deleteTemplate ───────────────────────────────────────────────────────────
+
+describe("deleteTemplate", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("returns no error on successful delete", async () => {
+    const eqMock = vi.fn().mockResolvedValue({ error: null });
+    const deleteMock = vi.fn().mockReturnValue({ eq: eqMock });
+
+    mockCreateClient.mockResolvedValue({
+      from: vi.fn().mockReturnValue({ delete: deleteMock }),
+    } as any);
+
+    const result = await deleteTemplate("t-1");
+
+    expect(result.error).toBeNull();
+    expect(eqMock).toHaveBeenCalledWith("id", "t-1");
+  });
+
+  it("propagates error on delete failure", async () => {
+    const eqMock = vi
+      .fn()
+      .mockResolvedValue({ error: { message: "not found" } });
+    const deleteMock = vi.fn().mockReturnValue({ eq: eqMock });
+
+    mockCreateClient.mockResolvedValue({
+      from: vi.fn().mockReturnValue({ delete: deleteMock }),
+    } as any);
+
+    const result = await deleteTemplate("t-missing");
+
+    expect(result.error).toBe("not found");
+  });
+});
+
+// ─── generateSlotsFromTemplates ───────────────────────────────────────────────
+
+describe("generateSlotsFromTemplates", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("calls supabase.rpc with correct params and returns inserted count", async () => {
+    const rpcMock = vi.fn().mockResolvedValue({ data: 9, error: null });
+
+    mockCreateClient.mockResolvedValue({
+      rpc: rpcMock,
+    } as any);
+
+    const result = await generateSlotsFromTemplates({
+      from: "2026-06-01",
+      to: "2026-06-07",
+    });
+
+    expect(result.data).toBe(9);
+    expect(result.error).toBeNull();
+    expect(rpcMock).toHaveBeenCalledWith("generate_slots_from_templates", {
+      p_from: "2026-06-01",
+      p_to: "2026-06-07",
+    });
+  });
+
+  it("returns error when rpc fails", async () => {
+    const rpcMock = vi
+      .fn()
+      .mockResolvedValue({ data: null, error: { message: "rpc error" } });
+
+    mockCreateClient.mockResolvedValue({
+      rpc: rpcMock,
+    } as any);
+
+    const result = await generateSlotsFromTemplates({
+      from: "2026-06-01",
+      to: "2026-06-07",
+    });
+
+    expect(result.data).toBeNull();
+    expect(result.error).toBe("rpc error");
+  });
+});

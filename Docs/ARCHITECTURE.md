@@ -12,23 +12,23 @@
 
 - Customers browse services, book appointments, chat with an FAQ bot, and manage their booking via a secure reference link — no account required
 - Owners log in to manage bookings, update status, manage availability, and maintain the FAQ knowledge base
-- Stack: Next.js App Router · TypeScript · Supabase PostgreSQL · Tailwind CSS · shadcn/ui · Resend · Vercel
+- Stack: Next.js App Router · TypeScript · Supabase PostgreSQL · Tailwind CSS · shadcn/ui · nodemailer/Gmail SMTP · Vercel
 
 ---
 
 ## 2. Architecture Decisions
 
-| Decision      | Choice                                                         | Rationale                                                                    |
-| ------------- | -------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| App style     | Monolith (Next.js App Router)                                  | Right-sized for 2-owner operation; single deploy                             |
-| Mutations     | Server Actions (forms) + Route Handlers (public URLs, chatbot) | Server Actions for simplicity; Route Handlers for shareable/public endpoints |
-| Customer auth | None — `reference_token` in email link                         | No account friction; UUID is unguessable                                     |
-| Owner auth    | Supabase Auth (email/password)                                 | Managed, secure, integrates with RLS                                         |
-| Chatbot       | FAQ text-search → keyword scoring → optional LLM formatting    | Phase 1: simple and cheap. Phase 2: pgvector RAG                             |
-| Maps          | Google Maps deep link (`https://maps.google.com/?q=...`)       | No API key, no cost, no complexity                                           |
-| Email         | Resend SDK called server-side, fire-and-forget                 | Non-blocking; delivery logged in `email_notifications`                       |
-| Validation    | Zod at every API and Server Action boundary                    | Single source of truth for input shapes + TS types                           |
-| DB access     | Service layer only (`lib/services/`)                           | Keeps routes thin; logic is isolated and testable                            |
+| Decision      | Choice                                                                               | Rationale                                                                               |
+| ------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| App style     | Monolith (Next.js App Router)                                                        | Right-sized for 2-owner operation; single deploy                                        |
+| Mutations     | Route Handlers (`/api/dashboard/*`) for owner mutations; Server Actions for FAQ CRUD | Booking/availability mutations use Route Handlers; FAQ uses `actions.ts` Server Actions |
+| Customer auth | None — `reference_token` in email link                                               | No account friction; UUID is unguessable                                                |
+| Owner auth    | Supabase Auth (email/password)                                                       | Managed, secure, integrates with RLS                                                    |
+| Chatbot       | Google Gemini 2.5 Flash + live FAQ grounding context                                 | System prompt includes active FAQ entries; `[ESCALATE]` token triggers owner alert      |
+| Maps          | Google Maps deep link (`https://maps.google.com/?q=...`)                             | No API key, no cost, no complexity                                                      |
+| Email         | nodemailer via Gmail SMTP, fire-and-forget                                           | Non-blocking; delivery logged in `email_notifications` via service role                 |
+| Validation    | Zod at every API and Server Action boundary                                          | Single source of truth for input shapes + TS types                                      |
+| DB access     | Service layer only (`lib/services/`)                                                 | Keeps routes thin; logic is isolated and testable                                       |
 
 ---
 
@@ -37,59 +37,91 @@
 ```
 kish/
 ├── app/
-│   ├── (public)/                        # No auth required
-│   │   ├── page.tsx                     # Homepage — services listing
-│   │   ├── book/page.tsx                # Booking form
-│   │   ├── book/confirmation/page.tsx   # Post-booking confirmation
-│   │   ├── booking/[token]/page.tsx     # Customer self-service (view/cancel/reschedule)
-│   │   ├── chat/page.tsx                # FAQ chatbot
-│   │   └── layout.tsx                   # Shared public layout (navbar, footer)
-│   ├── (dashboard)/                     # Owner — Supabase Auth required
+│   ├── (public)/                             # No auth required
+│   │   ├── page.tsx                          # Homepage — services listing
+│   │   ├── book/page.tsx                     # Booking form
+│   │   ├── book/confirmation/page.tsx        # Post-booking confirmation
+│   │   ├── booking/[token]/page.tsx          # Customer self-service (view/cancel)
+│   │   ├── chat/page.tsx                     # AI chatbot
+│   │   ├── location/page.tsx                 # Business location page
+│   │   └── layout.tsx                        # Shared public layout (navbar, footer)
+│   ├── (dashboard)/                          # Owner — Supabase Auth required
 │   │   └── dashboard/
-│   │       ├── layout.tsx               # Auth guard + sidebar nav
-│   │       ├── page.tsx                 # Bookings overview
-│   │       ├── bookings/[id]/page.tsx   # Booking detail + status controls
-│   │       ├── schedule/page.tsx        # Availability slot management
-│   │       └── faq/page.tsx             # FAQ CRUD
+│   │       ├── layout.tsx                    # Auth guard + sidebar nav
+│   │       ├── page.tsx                      # Bookings overview
+│   │       ├── bookings/[id]/page.tsx        # Booking detail + status controls
+│   │       ├── schedule/page.tsx             # Availability slot management
+│   │       └── faq/
+│   │           ├── page.tsx                  # FAQ CRUD
+│   │           └── actions.ts                # Server Actions for FAQ mutations
 │   ├── api/
-│   │   ├── bookings/route.ts            # POST — create booking
-│   │   ├── bookings/[token]/route.ts    # GET/PATCH — public token-based access
-│   │   ├── availability/route.ts        # GET — available slots by date
-│   │   ├── services/route.ts            # GET — active services list
-│   │   └── chat/route.ts                # POST — chatbot question
-│   ├── login/page.tsx                   # Owner login page
-│   └── layout.tsx                       # Root layout (fonts, metadata)
+│   │   ├── auth/signout/route.ts             # POST — sign out owner session
+│   │   ├── availability/route.ts             # GET (date or range) / POST (create slot, auth)
+│   │   ├── availability/[id]/route.ts        # PATCH (block/unblock) / DELETE (auth)
+│   │   ├── availability/generate/route.ts    # POST — generate slots from templates (auth)
+│   │   ├── availability/templates/route.ts   # GET / POST (auth)
+│   │   ├── availability/templates/[id]/route.ts  # DELETE (auth)
+│   │   ├── bookings/route.ts                 # POST — create booking (rate-limited)
+│   │   ├── bookings/[token]/route.ts         # GET / PATCH (cancel by token)
+│   │   ├── chat/route.ts                     # POST — chatbot question (rate-limited)
+│   │   ├── dashboard/bookings/[id]/route.ts  # PATCH — status + notes (auth)
+│   │   └── services/route.ts                 # GET — active services + add-ons list
+│   ├── login/page.tsx                        # Owner login page
+│   └── layout.tsx                            # Root layout (fonts, metadata)
 ├── components/
-│   ├── ui/                              # shadcn/ui primitives
-│   ├── booking/                         # BookingForm, BookingCard, StatusBadge
-│   ├── dashboard/                       # DashboardTable, BookingActions
-│   ├── chat/                            # ChatWidget, ChatMessage
-│   └── shared/                          # Navbar, Footer
+│   ├── auth/
+│   │   └── LoginForm.tsx
+│   ├── ui/                                   # shadcn/ui primitives
+│   ├── booking/
+│   │   ├── BookingForm.tsx
+│   │   └── BookingActions.tsx
+│   ├── dashboard/
+│   │   ├── BookingFilters.tsx
+│   │   ├── BookingStatusActions.tsx
+│   │   ├── FaqList.tsx
+│   │   ├── FaqModal.tsx
+│   │   ├── OwnerNotesForm.tsx
+│   │   ├── ScheduleCalendar.tsx
+│   │   └── WeeklyTemplatePanel.tsx
+│   ├── chat/
+│   │   └── ChatWidget.tsx
+│   └── shared/
+│       ├── DashboardSidebar.tsx
+│       ├── Footer.tsx
+│       ├── Navbar.tsx
+│       └── StatusBadge.tsx
 ├── lib/
 │   ├── constants/
-│   │   ├── booking.ts                   # BOOKING_STATUS, VALID_STATUS_TRANSITIONS, EMAIL_NOTIFICATION_TYPE
-│   │   └── chat.ts                      # CONFIDENCE_THRESHOLD, ESCALATION_MESSAGE
-│   ├── services/                        # All Supabase access lives here
-│   │   ├── booking.service.ts
+│   │   ├── booking.ts                        # BOOKING_STATUS, VALID_STATUS_TRANSITIONS, EMAIL_NOTIFICATION_TYPE
+│   │   └── chat.ts                           # CONFIDENCE_THRESHOLD, ESCALATION_MESSAGE
+│   ├── rate-limit.ts                         # In-process sliding window rate limiter
+│   ├── services/                             # All Supabase access lives here
 │   │   ├── availability.service.ts
+│   │   ├── booking.service.ts
+│   │   ├── chat.service.ts
 │   │   ├── email.service.ts
-│   │   ├── faq.service.ts
-│   │   └── chat.service.ts
+│   │   └── faq.service.ts
 │   ├── supabase/
-│   │   ├── client.ts                    # Browser client (anon key)
-│   │   ├── server.ts                    # Server client (cookies, anon key)
-│   │   └── admin.ts                     # Service role client — server-only
+│   │   ├── client.ts                         # Browser client (anon key)
+│   │   ├── server.ts                         # Server client (cookies, anon key)
+│   │   └── admin.ts                          # Service role client — server-only
 │   ├── validations/
-│   │   ├── booking.ts                   # Zod: createBookingSchema, updateBookingStatusSchema
-│   │   ├── availability.ts              # Zod: createSlotSchema, updateSlotSchema
-│   │   ├── faq.ts                       # Zod: createFaqSchema, updateFaqSchema
-│   │   └── chat.ts                      # Zod: chatQuestionSchema
-│   └── utils.ts                         # cn() Tailwind class merge utility
-├── types/index.ts                       # All TypeScript interfaces
-├── middleware.ts                        # Supabase session refresh + /dashboard/* guard
-├── supabase/migrations/                 # SQL migration files
-├── .github/instructions/               # Copilot agent instruction files
-└── Docs/                               # Architecture and planning documentation
+│   │   ├── availability.ts                   # Zod: createSlotSchema, createTemplateSchema, generateSlotsSchema
+│   │   ├── booking.ts                        # Zod: createBookingSchema, updateBookingStatusSchema
+│   │   ├── chat.ts                           # Zod: chatQuestionSchema
+│   │   └── faq.ts                            # Zod: createFaqSchema, updateFaqSchema
+│   └── utils.ts                              # cn() Tailwind class merge utility
+├── scripts/
+│   ├── seed-slots.mjs                        # One-time slot seed script (Node.js)
+│   └── setup-db.sql                          # One-time RLS/permission remediation (paste into Supabase SQL editor)
+├── types/index.ts                            # All TypeScript interfaces
+├── middleware.ts                             # Supabase session refresh + /dashboard/* guard
+├── next.config.ts                            # Security headers (CSP, X-Frame-Options, etc.)
+├── supabase/
+│   ├── migrations/                           # SQL migration files (run in order)
+│   └── seed.sql                              # Seeds services and add-ons
+├── .github/instructions/                     # Copilot agent instruction files
+└── Docs/                                     # Architecture and planning documentation
 ```
 
 ---
@@ -128,7 +160,7 @@ kish/
 
 ---
 
-### `availability_templates` `[RESERVED — Phase 2]`
+### `availability_templates`
 
 | Column                  | Type        | Nullable | Default             | Notes                |
 | ----------------------- | ----------- | -------- | ------------------- | -------------------- |
@@ -150,7 +182,6 @@ kish/
 | ----------------- | ----------- | -------- | ------------------- | ----------------------------------------- |
 | `id`              | uuid        | NO       | `gen_random_uuid()` | PK                                        |
 | `reference_token` | text        | NO       | —                   | UNIQUE; `crypto.randomUUID()`             |
-| `service_id`      | uuid        | NO       | —                   | FK → `services(id)`                       |
 | `slot_id`         | uuid        | NO       | —                   | FK → `availability_slots(id)`             |
 | `customer_name`   | text        | NO       | —                   |                                           |
 | `customer_email`  | text        | NO       | —                   |                                           |
@@ -167,7 +198,7 @@ kish/
 | `created_at`      | timestamptz | NO       | `now()`             |                                           |
 | `updated_at`      | timestamptz | NO       | `now()`             |                                           |
 
-**RLS:** Anonymous: SELECT only (service layer always filters by `reference_token`; `owner_notes` excluded in query). Authenticated (owner): full access.
+**RLS:** Anon key has no direct access to `bookings` — all public reads/writes go through `createAdminClient()` (service role). Authenticated (owner): full access.
 
 ---
 
@@ -212,12 +243,58 @@ kish/
 | `booking_id`          | uuid        | NO       | —                   | FK → `bookings(id)`           |
 | `recipient_email`     | text        | NO       | —                   |                               |
 | `type`                | text        | NO       | —                   | See `EMAIL_NOTIFICATION_TYPE` |
-| `provider_message_id` | text        | YES      | —                   | Resend message ID             |
+| `provider_message_id` | text        | YES      | —                   | SMTP message ID; may be null  |
 | `status`              | text        | NO       | `'sent'`            | `sent` / `failed` / `bounced` |
 | `error_message`       | text        | YES      | —                   |                               |
 | `sent_at`             | timestamptz | NO       | `now()`             |                               |
 
 **RLS:** No anonymous access. Authenticated (owner): SELECT. INSERT via service role (admin client).
+
+---
+
+### `add_ons`
+
+| Column        | Type          | Nullable | Default             | Notes                   |
+| ------------- | ------------- | -------- | ------------------- | ----------------------- |
+| `id`          | uuid          | NO       | `gen_random_uuid()` | PK                      |
+| `name`        | text          | NO       | —                   |                         |
+| `description` | text          | YES      | —                   |                         |
+| `price`       | numeric(10,2) | NO       | —                   |                         |
+| `is_active`   | boolean       | NO       | `true`              | Filter for public reads |
+| `created_at`  | timestamptz   | NO       | `now()`             |                         |
+| `updated_at`  | timestamptz   | NO       | `now()`             |                         |
+
+**RLS:** Anonymous: read where `is_active = true`. Authenticated (owner): full access.
+
+---
+
+### `booking_items`
+
+One row per service package selected in a booking. Price is snapshotted at booking time.
+
+| Column             | Type          | Nullable | Default             | Notes                                        |
+| ------------------ | ------------- | -------- | ------------------- | -------------------------------------------- |
+| `id`               | uuid          | NO       | `gen_random_uuid()` | PK                                           |
+| `booking_id`       | uuid          | NO       | —                   | FK → `bookings(id)` ON DELETE CASCADE        |
+| `service_id`       | uuid          | NO       | —                   | FK → `services(id)`                          |
+| `price_at_booking` | numeric(10,2) | NO       | —                   | Snapshot of service price at time of booking |
+
+**RLS:** Anonymous: SELECT (service layer filters by booking). Authenticated (owner): full access.
+
+---
+
+### `booking_add_ons`
+
+One row per add-on selected in a booking. Price is snapshotted at booking time.
+
+| Column             | Type          | Nullable | Default             | Notes                                       |
+| ------------------ | ------------- | -------- | ------------------- | ------------------------------------------- |
+| `id`               | uuid          | NO       | `gen_random_uuid()` | PK                                          |
+| `booking_id`       | uuid          | NO       | —                   | FK → `bookings(id)` ON DELETE CASCADE       |
+| `add_on_id`        | uuid          | NO       | —                   | FK → `add_ons(id)`                          |
+| `price_at_booking` | numeric(10,2) | NO       | —                   | Snapshot of add-on price at time of booking |
+
+**RLS:** Anonymous: SELECT (service layer filters by booking). Authenticated (owner): full access.
 
 ---
 
@@ -270,28 +347,31 @@ Error:   { error: string, details?: ZodError | string }
 
 ### Public Routes (no auth)
 
-| Method  | Path                                | Body / Params          | Description                    |
-| ------- | ----------------------------------- | ---------------------- | ------------------------------ |
-| `GET`   | `/api/services`                     | —                      | List active services           |
-| `GET`   | `/api/availability?date=YYYY-MM-DD` | query: `date`          | Available slots for a date     |
-| `POST`  | `/api/bookings`                     | `createBookingSchema`  | Create a new booking           |
-| `GET`   | `/api/bookings/[token]`             | —                      | Get booking by reference token |
-| `PATCH` | `/api/bookings/[token]`             | `{ action: "cancel" }` | Cancel booking by token        |
-| `POST`  | `/api/chat`                         | `chatQuestionSchema`   | Submit chatbot question        |
+| Method  | Path                                | Body / Params          | Description                                          |
+| ------- | ----------------------------------- | ---------------------- | ---------------------------------------------------- |
+| `GET`   | `/api/services`                     | —                      | List active services and add-ons                     |
+| `GET`   | `/api/availability?date=YYYY-MM-DD` | query: `date`          | Available (unblocked) slots for a single date        |
+| `POST`  | `/api/bookings`                     | `createBookingSchema`  | Create a new booking — rate-limited 5/hr per IP      |
+| `GET`   | `/api/bookings/[token]`             | —                      | Get booking by reference token                       |
+| `PATCH` | `/api/bookings/[token]`             | `{ action: "cancel" }` | Cancel booking by token                              |
+| `POST`  | `/api/chat`                         | `chatQuestionSchema`   | Submit chatbot question — rate-limited 30/min per IP |
 
 ### Owner Routes (Supabase Auth session required)
 
-Owner mutations are handled via **Server Actions** in dashboard pages:
+Booking and availability mutations are handled via **Route Handlers** (`/api/dashboard/*`, `/api/availability/*`). FAQ mutations use **Server Actions** in `app/(dashboard)/dashboard/faq/actions.ts`.
 
-| Action                             | Description                                    |
-| ---------------------------------- | ---------------------------------------------- |
-| `updateBookingStatus(id, status)`  | Transition status; sets timestamp fields       |
-| `updateOwnerNotes(id, notes)`      | Update private notes — never returned publicly |
-| `createFaqEntry(input)`            | Add FAQ entry                                  |
-| `updateFaqEntry(id, input)`        | Update FAQ entry                               |
-| `deleteFaqEntry(id)`               | Delete FAQ entry                               |
-| `createSlot(input)`                | Add availability slot                          |
-| `updateSlotBlocked(id, isBlocked)` | Block/unblock a slot                           |
+| Method   | Path                                       | Body / Params                                                                      | Description                                 |
+| -------- | ------------------------------------------ | ---------------------------------------------------------------------------------- | ------------------------------------------- |
+| `GET`    | `/api/availability?from=YYYY-MM-DD&to=...` | query: `from`, `to`                                                                | All slots for a date range (owner calendar) |
+| `POST`   | `/api/availability`                        | `createSlotSchema`                                                                 | Create a new availability slot              |
+| `PATCH`  | `/api/availability/[id]`                   | `{ is_blocked: boolean }`                                                          | Block or unblock a slot                     |
+| `DELETE` | `/api/availability/[id]`                   | —                                                                                  | Delete a slot                               |
+| `GET`    | `/api/availability/templates`              | —                                                                                  | List weekly availability templates          |
+| `POST`   | `/api/availability/templates`              | `createTemplateSchema`                                                             | Create a weekly template                    |
+| `DELETE` | `/api/availability/templates/[id]`         | —                                                                                  | Delete a template                           |
+| `POST`   | `/api/availability/generate`               | `generateSlotsSchema`                                                              | Generate slots from templates for a range   |
+| `PATCH`  | `/api/dashboard/bookings/[id]`             | `{ action: "update_status", status }` or `{ action: "update_notes", owner_notes }` | Update booking status or owner notes        |
+| `POST`   | `/api/auth/signout`                        | —                                                                                  | Sign out owner session                      |
 
 ---
 
@@ -303,7 +383,7 @@ Owner mutations are handled via **Server Actions** in dashboard pages:
 BOOKING_STATUS; // { PENDING, CONFIRMED, ON_THE_WAY, COMPLETED, CANCELLED, DECLINED }
 BOOKING_STATUS_VALUES; // tuple of all values — used in Zod enums
 VALID_STATUS_TRANSITIONS; // Record<BookingStatus, BookingStatus[]>
-EMAIL_NOTIFICATION_TYPE; // { BOOKING_CONFIRMATION, BOOKING_CONFIRMED, BOOKING_CANCELLED, BOOKING_DECLINED, BOOKING_REMINDER }
+EMAIL_NOTIFICATION_TYPE; // { BOOKING_CONFIRMATION, BOOKING_CONFIRMED, BOOKING_ON_THE_WAY, BOOKING_COMPLETED, BOOKING_CANCELLED, BOOKING_DECLINED, BOOKING_REMINDER, ADMIN_BOOKING_ALERT }
 EMAIL_STATUS; // { SENT, FAILED, BOUNCED }
 ```
 
@@ -320,13 +400,19 @@ ESCALATION_MESSAGE; // Default fallback message when confidence is too low
 
 ## 8. Environment Variables
 
-| Variable                        | Scope           | Required | Description                               |
-| ------------------------------- | --------------- | -------- | ----------------------------------------- |
-| `NEXT_PUBLIC_SUPABASE_URL`      | Client + Server | YES      | Supabase project URL                      |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Client + Server | YES      | Supabase publishable key                  |
-| `SUPABASE_SERVICE_ROLE_KEY`     | Server only     | YES      | Service role key — never expose to client |
-| `RESEND_API_KEY`                | Server only     | YES      | Resend email API key                      |
-| `NEXT_PUBLIC_APP_URL`           | Client + Server | YES      | Base URL (`http://localhost:3000` in dev) |
+| Variable                            | Scope           | Required | Description                                                              |
+| ----------------------------------- | --------------- | -------- | ------------------------------------------------------------------------ |
+| `NEXT_PUBLIC_SUPABASE_URL`          | Client + Server | YES      | Supabase project URL                                                     |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY`     | Client + Server | YES      | Supabase publishable key                                                 |
+| `SUPABASE_SERVICE_ROLE_KEY`         | Server only     | YES      | Service role key — never expose to client                                |
+| `GEMINI_API_KEY`                    | Server only     | YES      | Google Gemini API key for chatbot (`lib/services/chat.service.ts`)       |
+| `SMTP_HOST`                         | Server only     | NO       | SMTP host — defaults to `smtp.gmail.com`                                 |
+| `SMTP_PORT`                         | Server only     | NO       | SMTP port — defaults to `587` (STARTTLS)                                 |
+| `SMTP_USER`                         | Server only     | YES      | Gmail address used as FROM and auth username                             |
+| `SMTP_PASS`                         | Server only     | YES      | Gmail App Password — **not** your regular Gmail password                 |
+| `ADMIN_EMAIL`                       | Server only     | YES      | Owner email — receives new booking alert and chatbot escalation          |
+| `NEXT_PUBLIC_APP_URL`               | Client + Server | NO       | Deployed app URL; defaults to `http://localhost:3000`                    |
+| `NEXT_PUBLIC_GOOGLE_MAPS_EMBED_URL` | Client          | NO       | Google Maps embed URL for the Location page; leave blank to hide the map |
 
 ---
 
@@ -338,6 +424,9 @@ ESCALATION_MESSAGE; // Default fallback message when confidence is too low
 - `owner_notes` — stored on bookings but explicitly excluded from all public SELECT statements; no RLS workaround needed
 - `reference_token` — always `crypto.randomUUID()`, never sequential or predictable IDs
 - All API inputs parsed with Zod `safeParse()` before any service call
+- **RLS hardening** (`20260522000000_security_hardening.sql`): anon RLS policies on `bookings` were dropped — all public booking reads/writes go through `createAdminClient()` (service role), so the anon key can no longer read booking rows directly via the Supabase REST API
+- **Security response headers** set in `next.config.ts` for all routes: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy`, and a Content Security Policy. Note: CSP includes `unsafe-inline` and `unsafe-eval` — required by Next.js client hydration
+- **Rate limiting** (`lib/rate-limit.ts`): in-process sliding window applied to `POST /api/bookings` (5 req / 60 min per IP) and `POST /api/chat` (30 req / 60 sec per IP). Returns `429` with `Retry-After` header when exceeded. **Caveat:** in-process Map is per-lambda — limits are not shared across concurrent Vercel instances; upgrade to `@upstash/ratelimit` before high-traffic production use
 
 ---
 
@@ -345,11 +434,10 @@ ESCALATION_MESSAGE; // Default fallback message when confidence is too low
 
 These are intentionally not built yet. Do not implement until explicitly planned:
 
-| Feature                                          | Reason deferred                                            |
-| ------------------------------------------------ | ---------------------------------------------------------- |
-| `availability_templates` (slot generation)       | Schema defined; cron/generation logic is Phase 2           |
-| pgvector RAG for chatbot                         | Phase 1 keyword matching is sufficient; add when FAQ grows |
-| Embedded Google Maps                             | Deep link is sufficient for now                            |
-| Email domain verification (Resend)               | Dev sends to own email; configure for production           |
-| Booking reschedule (slot swap)                   | Cancellation is Phase 1; reschedule is Phase 2             |
-| Rate limiting on `/api/bookings` and `/api/chat` | Add before public launch                                   |
+| Feature                                          | Reason deferred                                                               |
+| ------------------------------------------------ | ----------------------------------------------------------------------------- |
+| pgvector RAG for chatbot                         | Gemini + FAQ grounding is sufficient now; add when FAQ grows large            |
+| Embedded Google Maps                             | Deep link is sufficient for now                                               |
+| SPF/DKIM configuration for Gmail SMTP sender     | Dev sends to own email; configure DNS records before public launch            |
+| Booking reschedule (slot swap)                   | Cancellation is Phase 1; reschedule is Phase 2                                |
+| Distributed rate limiting (`@upstash/ratelimit`) | In-process limiter is sufficient for single-instance; required before scaling |

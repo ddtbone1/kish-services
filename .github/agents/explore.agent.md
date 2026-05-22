@@ -1,7 +1,7 @@
 ---
 description: "Explore and map the Kish Auto Detailing codebase. Use when: mapping file structure, tracing data flow, auditing DB coverage, checking constants compliance, finding orphaned files, understanding how a feature is wired end-to-end."
 tools: [read, search]
-name: "Explore"
+name: "Kish Explore"
 argument-hint: "Describe WHAT you're looking for and desired thoroughness (quick/medium/thorough)"
 ---
 

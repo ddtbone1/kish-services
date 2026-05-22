@@ -1,7 +1,7 @@
 ---
 description: "Audit Kish Auto Detailing codebase for performance issues. Use when: reviewing a feature for N+1 queries, checking missing indexes, auditing unnecessary client components, reviewing API caching, checking Supabase client usage patterns."
 tools: [read, search]
-name: "Perf Auditor"
+name: "Kish Perf Auditor"
 argument-hint: "Scope the audit: 'full', a feature name (e.g. 'bookings'), or a specific file path"
 ---
 

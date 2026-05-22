@@ -5,9 +5,21 @@ import {
 } from "@/lib/constants/booking";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Booking } from "@/types";
-import { Resend } from "resend";
+import nodemailer from "nodemailer";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+function createTransporter() {
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST ?? "smtp.gmail.com",
+    port: Number(process.env.SMTP_PORT ?? 587),
+    secure: false, // STARTTLS on port 587
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
+}
+
+const FROM_ADDRESS = `Kish Auto Detailing <${process.env.SMTP_USER ?? "noreply@kishautodetailing.com"}>`;
 
 interface SendEmailParams {
   booking: Booking;
@@ -21,28 +33,27 @@ export async function sendBookingEmail({
   const admin = createAdminClient();
 
   const subject = getSubjectForType(type);
-  const body = getBodyForType(booking, type);
+  const html = getBodyForType(booking, type);
 
   try {
-    const { data, error } = await resend.emails.send({
-      from: "Kish Auto Detailing <noreply@kishautodetailing.com>",
+    const transporter = createTransporter();
+    await transporter.sendMail({
+      from: FROM_ADDRESS,
       to: booking.customer_email,
       subject,
-      html: body,
+      html,
     });
 
-    // Log the notification
     await admin.from("email_notifications").insert({
       booking_id: booking.id,
       recipient_email: booking.customer_email,
       type,
-      provider_message_id: data?.id ?? null,
-      status: error ? EMAIL_STATUS.FAILED : EMAIL_STATUS.SENT,
-      error_message: error?.message ?? null,
+      provider_message_id: null,
+      status: EMAIL_STATUS.SENT,
+      error_message: null,
       sent_at: new Date().toISOString(),
     });
 
-    if (error) return { error: error.message };
     return { error: null };
   } catch (err) {
     const errorMessage =
@@ -68,6 +79,10 @@ function getSubjectForType(type: EmailNotificationType): string {
       return "Booking Received - Kish Auto Detailing";
     case EMAIL_NOTIFICATION_TYPE.BOOKING_CONFIRMED:
       return "Booking Confirmed - Kish Auto Detailing";
+    case EMAIL_NOTIFICATION_TYPE.BOOKING_ON_THE_WAY:
+      return "We're On Our Way! - Kish Auto Detailing";
+    case EMAIL_NOTIFICATION_TYPE.BOOKING_COMPLETED:
+      return "Service Complete - Kish Auto Detailing";
     case EMAIL_NOTIFICATION_TYPE.BOOKING_CANCELLED:
       return "Booking Cancelled - Kish Auto Detailing";
     case EMAIL_NOTIFICATION_TYPE.BOOKING_DECLINED:
@@ -93,22 +108,111 @@ function getBodyForType(booking: Booking, type: EmailNotificationType): string {
     case EMAIL_NOTIFICATION_TYPE.BOOKING_CONFIRMED:
       return `
         <h2>Your booking is confirmed!</h2>
-        <p>Hi ${booking.customer_name}, your auto detailing appointment has been confirmed.</p>
+        <p>Hi ${booking.customer_name}, your auto detailing appointment has been confirmed. We look forward to seeing you!</p>
         <p><a href="${bookingLink}">View booking details</a></p>
+      `;
+    case EMAIL_NOTIFICATION_TYPE.BOOKING_ON_THE_WAY:
+      return `
+        <h2>We're on our way!</h2>
+        <p>Hi ${booking.customer_name}, your Kish Auto Detailing team is heading to your location now.</p>
+        <p>Please make sure your vehicle is accessible. See you soon!</p>
+        <p><a href="${bookingLink}">View booking details</a></p>
+      `;
+    case EMAIL_NOTIFICATION_TYPE.BOOKING_COMPLETED:
+      return `
+        <h2>Service complete — thank you!</h2>
+        <p>Hi ${booking.customer_name}, your auto detailing service has been completed. We hope your vehicle looks great!</p>
+        <p>We'd love to have you back. Book your next appointment anytime.</p>
+        <p><a href="${appUrl}/book">Book Again</a></p>
       `;
     case EMAIL_NOTIFICATION_TYPE.BOOKING_CANCELLED:
       return `
         <h2>Booking Cancelled</h2>
         <p>Hi ${booking.customer_name}, your booking has been cancelled.</p>
         <p>If this was a mistake, please book again at our website.</p>
+        <p><a href="${appUrl}/book">Book Again</a></p>
       `;
     case EMAIL_NOTIFICATION_TYPE.BOOKING_DECLINED:
       return `
         <h2>Booking Update</h2>
         <p>Hi ${booking.customer_name}, unfortunately we're unable to accommodate your booking at the requested time.</p>
         <p>Please try booking a different time slot.</p>
+        <p><a href="${appUrl}/book">Book Again</a></p>
       `;
     default:
       return `<p>Visit <a href="${bookingLink}">your booking</a> for details.</p>`;
+  }
+}
+
+// ─── Admin notification ───────────────────────────────────────────────────────
+
+export async function sendAdminNotification(
+  booking: Booking,
+): Promise<{ error: string | null }> {
+  const adminEmail = process.env.ADMIN_EMAIL;
+
+  if (!adminEmail) {
+    console.warn(
+      "[email.service] ADMIN_EMAIL is not set — skipping admin notification",
+    );
+    return { error: null };
+  }
+
+  const admin = createAdminClient();
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const dashboardLink = `${appUrl}/dashboard/bookings/${booking.id}`;
+
+  const subject = `New Booking – ${booking.customer_name}`;
+  const html = `
+    <h2>New booking received</h2>
+    <table style="border-collapse:collapse;font-size:14px;">
+      <tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Customer</td><td><strong>${booking.customer_name}</strong></td></tr>
+      <tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Email</td><td>${booking.customer_email}</td></tr>
+      ${booking.customer_phone ? `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Phone</td><td>${booking.customer_phone}</td></tr>` : ""}
+      <tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Address</td><td>${booking.address_line1}${booking.address_line2 ? ", " + booking.address_line2 : ""}, ${booking.city}</td></tr>
+      <tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Reference</td><td>${booking.reference_token}</td></tr>
+    </table>
+    <p style="margin-top:16px;">
+      <a href="${dashboardLink}" style="background:#14b8a6;color:#fff;padding:10px 20px;border-radius:24px;text-decoration:none;font-weight:600;">
+        View &amp; Respond in Dashboard
+      </a>
+    </p>
+  `;
+
+  try {
+    const transporter = createTransporter();
+    await transporter.sendMail({
+      from: FROM_ADDRESS,
+      to: adminEmail,
+      subject,
+      html,
+    });
+
+    await admin.from("email_notifications").insert({
+      booking_id: booking.id,
+      recipient_email: adminEmail,
+      type: EMAIL_NOTIFICATION_TYPE.ADMIN_BOOKING_ALERT,
+      provider_message_id: null,
+      status: EMAIL_STATUS.SENT,
+      error_message: null,
+      sent_at: new Date().toISOString(),
+    });
+
+    return { error: null };
+  } catch (err) {
+    const errorMessage =
+      err instanceof Error ? err.message : "Unknown email error";
+
+    await admin.from("email_notifications").insert({
+      booking_id: booking.id,
+      recipient_email: adminEmail,
+      type: EMAIL_NOTIFICATION_TYPE.ADMIN_BOOKING_ALERT,
+      provider_message_id: null,
+      status: EMAIL_STATUS.FAILED,
+      error_message: errorMessage,
+      sent_at: new Date().toISOString(),
+    });
+
+    return { error: errorMessage };
   }
 }

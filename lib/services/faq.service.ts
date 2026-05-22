@@ -50,6 +50,21 @@ export async function updateFaq(
   return { data: data as FaqEntry, error: null };
 }
 
+export async function getAllFaqs(): Promise<{
+  data: FaqEntry[] | null;
+  error: string | null;
+}> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("faq_entries")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) return { data: null, error: error.message };
+  return { data: data as FaqEntry[], error: null };
+}
+
 export async function deleteFaq(id: string): Promise<{ error: string | null }> {
   const supabase = await createClient();
 
