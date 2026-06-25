@@ -131,9 +131,18 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground cursor-default;
   }
   html {
     @apply font-sans;
+  }
+  a, button, [role="button"], label, select, summary, [type="button"], [type="submit"], [type="reset"] {
+    @apply cursor-pointer select-none;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply select-none;
+  }
+  input, textarea, [contenteditable] {
+    @apply cursor-text select-auto;
   }
 }

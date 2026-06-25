@@ -92,7 +92,7 @@ export function ChatWidget() {
   }
 
   return (
-    <div className="flex flex-col bg-card rounded-3xl shadow-[var(--shadow-card)] overflow-hidden h-[calc(100vh-12rem)] max-h-[680px]">
+    <div className="flex flex-col flex-1 bg-card rounded-3xl shadow-[var(--shadow-card)] overflow-hidden min-h-0">
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto px-4 py-5 space-y-4">
         {messages.length === 0 && <WelcomeState />}

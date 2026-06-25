@@ -12,10 +12,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
 const mockAdminFrom = vi.hoisted(() => vi.fn());
+const mockAdminRpc = vi.hoisted(() => vi.fn());
 const mockServerFrom = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/supabase/admin", () => ({
-  createAdminClient: vi.fn(() => ({ from: mockAdminFrom })),
+  createAdminClient: vi.fn(() => ({ from: mockAdminFrom, rpc: mockAdminRpc })),
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -24,6 +25,7 @@ vi.mock("@/lib/supabase/server", () => ({
 
 import {
   cancelBookingByToken,
+  createBooking,
   getBookingByToken,
   updateBookingStatus,
 } from "./booking.service";
@@ -140,6 +142,112 @@ describe("getBookingByToken", () => {
 
     const selectArg: string = select.mock.calls[0][0];
     expect(selectArg).not.toContain("owner_notes");
+  });
+});
+
+// ─── createBooking (atomic RPC) ───────────────────────────────────────────────
+
+describe("createBooking", () => {
+  const INPUT = {
+    slot_id: "550e8400-e29b-41d4-a716-446655440000",
+    service_ids: ["660e8400-e29b-41d4-a716-446655440000"],
+    add_on_ids: ["770e8400-e29b-41d4-a716-446655440000"],
+    customer_name: "Karl Marty",
+    customer_email: "karl@example.com",
+    customer_phone: undefined,
+    address_line1: "123 Main St",
+    address_line2: undefined,
+    city: "General Santos City",
+    notes: undefined,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("calls create_booking RPC with mapped params and returns the row (no owner_notes)", async () => {
+    const row = {
+      ...makePublicBooking(),
+      owner_notes: "secret internal note",
+    };
+    mockAdminRpc.mockResolvedValue({ data: row, error: null });
+
+    const result = await createBooking(INPUT);
+
+    expect(result.error).toBeNull();
+    expect(result.code).toBeNull();
+    expect(result.data).toMatchObject({ id: BOOKING_ID });
+    expect(result.data).not.toHaveProperty("owner_notes");
+
+    expect(mockAdminRpc).toHaveBeenCalledWith("create_booking", {
+      p_slot_id: INPUT.slot_id,
+      p_service_ids: INPUT.service_ids,
+      p_add_on_ids: INPUT.add_on_ids,
+      p_customer_name: INPUT.customer_name,
+      p_customer_email: INPUT.customer_email,
+      p_customer_phone: null,
+      p_address_line1: INPUT.address_line1,
+      p_address_line2: null,
+      p_city: INPUT.city,
+      p_notes: null,
+    });
+  });
+
+  it("defaults add_on_ids to an empty array when omitted", async () => {
+    mockAdminRpc.mockResolvedValue({ data: makePublicBooking(), error: null });
+
+    const { add_on_ids: _omit, ...noAddOns } = INPUT;
+    void _omit;
+    await createBooking(noAddOns);
+
+    expect(mockAdminRpc.mock.calls[0][1].p_add_on_ids).toEqual([]);
+  });
+
+  it("maps PT409 (slot taken) to a conflict", async () => {
+    mockAdminRpc.mockResolvedValue({
+      data: null,
+      error: { code: "PT409", message: "Selected slot has already been reserved" },
+    });
+
+    const result = await createBooking(INPUT);
+
+    expect(result.data).toBeNull();
+    expect(result.code).toBe("conflict");
+    expect(result.error).toContain("reserved");
+  });
+
+  it("maps a 23505 unique-index race to a conflict", async () => {
+    mockAdminRpc.mockResolvedValue({
+      data: null,
+      error: { code: "23505", message: "duplicate key value violates unique constraint" },
+    });
+
+    const result = await createBooking(INPUT);
+
+    expect(result.code).toBe("conflict");
+  });
+
+  it("maps PT422 (invalid services/add-ons) to invalid", async () => {
+    mockAdminRpc.mockResolvedValue({
+      data: null,
+      error: { code: "PT422", message: "One or more selected services are unavailable" },
+    });
+
+    const result = await createBooking(INPUT);
+
+    expect(result.data).toBeNull();
+    expect(result.code).toBe("invalid");
+  });
+
+  it("maps an unknown SQLSTATE to a generic error", async () => {
+    mockAdminRpc.mockResolvedValue({
+      data: null,
+      error: { code: "XX000", message: "internal error" },
+    });
+
+    const result = await createBooking(INPUT);
+
+    expect(result.code).toBe("error");
   });
 });
 

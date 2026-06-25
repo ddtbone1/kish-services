@@ -3,7 +3,7 @@
 // Added: 2026-05-21
 
 import { Navbar } from "@/components/shared/Navbar";
-import { Footer } from "@/components/shared/Footer";
+import { ConditionalFooter } from "@/components/shared/ConditionalFooter";
 
 export default function PublicLayout({
   children,
@@ -17,7 +17,8 @@ export default function PublicLayout({
       <main className="flex min-h-screen flex-col pb-20 md:pb-0">
         {children}
       </main>
-      <Footer />
+      <ConditionalFooter />
     </>
   );
 }
+

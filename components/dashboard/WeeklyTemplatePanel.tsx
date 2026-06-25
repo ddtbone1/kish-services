@@ -5,6 +5,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { formatTime } from "@/lib/utils/datetime";
 import type { AvailabilityTemplate } from "@/types";
 import { ChevronDown, ChevronUp, Loader2, Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -35,12 +36,6 @@ function offsetDate(days: number): string {
   const d = new Date();
   d.setDate(d.getDate() + days);
   return d.toISOString().split("T")[0];
-}
-
-function formatTime(t: string): string {
-  const [h, m] = t.split(":");
-  const hour = parseInt(h, 10);
-  return `${hour % 12 || 12}:${m} ${hour >= 12 ? "PM" : "AM"}`;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────

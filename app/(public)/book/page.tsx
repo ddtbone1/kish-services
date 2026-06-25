@@ -40,7 +40,7 @@ export default async function BookPage({
     await Promise.all([getServicesAndAddOns(), searchParams]);
 
   return (
-    <main className="flex flex-col items-center px-4 py-8 md:py-16">
+    <main className="flex flex-col items-center px-4 pt-24 md:pt-28 py-8 md:py-16">
       <div className="w-full max-w-2xl">
         <h1 className="text-2xl font-bold md:text-3xl mb-8">
           Book an Appointment

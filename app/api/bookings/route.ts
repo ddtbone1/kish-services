@@ -35,12 +35,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data, error } = await createBooking(parsed.data);
+    const { data, error, code } = await createBooking(parsed.data);
 
     if (error || !data) {
+      // 409 when the chosen slot is no longer available (taken/blocked/past),
+      // 422 when the selected services/add-ons are invalid, else 500.
+      const status = code === "conflict" ? 409 : code === "invalid" ? 422 : 500;
       return NextResponse.json(
         { error: error ?? "Failed to create booking" },
-        { status: 500 },
+        { status },
       );
     }
 

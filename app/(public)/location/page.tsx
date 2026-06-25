@@ -53,7 +53,7 @@ const fullAddress = [
 
 export default function LocationPage() {
   return (
-    <main className="px-4 md:px-16 py-12 md:py-20 max-w-5xl mx-auto w-full">
+    <main className="px-4 md:px-16 pt-24 md:pt-28 py-12 md:py-20 max-w-5xl mx-auto w-full">
       {/* Header */}
       <div className="mb-12 text-center">
         <div className="flex items-center justify-center gap-3 mb-4">

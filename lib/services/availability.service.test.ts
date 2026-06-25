@@ -62,7 +62,7 @@ const mockCreateClient = vi.mocked(createClient);
 describe("getAvailableSlots", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("returns available slots for a given date", async () => {
+  it("calls the get_available_slots RPC and returns its rows", async () => {
     const fakeSlots = [
       {
         id: "slot-1",
@@ -73,34 +73,23 @@ describe("getAvailableSlots", () => {
       },
     ];
 
-    const orderMock = vi
-      .fn()
-      .mockResolvedValue({ data: fakeSlots, error: null });
-    const eqBlockedMock = vi.fn().mockReturnValue({ order: orderMock });
-    const eqDateMock = vi.fn().mockReturnValue({ eq: eqBlockedMock });
-    const selectMock = vi.fn().mockReturnValue({ eq: eqDateMock });
-
-    mockCreateClient.mockResolvedValue({
-      from: vi.fn().mockReturnValue({ select: selectMock }),
-    } as any);
+    const rpcMock = vi.fn().mockResolvedValue({ data: fakeSlots, error: null });
+    mockCreateClient.mockResolvedValue({ rpc: rpcMock } as any);
 
     const result = await getAvailableSlots("2026-06-01");
 
+    expect(rpcMock).toHaveBeenCalledWith("get_available_slots", {
+      p_date: "2026-06-01",
+    });
     expect(result.data).toEqual(fakeSlots);
     expect(result.error).toBeNull();
   });
 
-  it("returns error when Supabase fails", async () => {
-    const orderMock = vi
+  it("returns error when the RPC fails", async () => {
+    const rpcMock = vi
       .fn()
       .mockResolvedValue({ data: null, error: { message: "DB error" } });
-    const eqBlockedMock = vi.fn().mockReturnValue({ order: orderMock });
-    const eqDateMock = vi.fn().mockReturnValue({ eq: eqBlockedMock });
-    const selectMock = vi.fn().mockReturnValue({ eq: eqDateMock });
-
-    mockCreateClient.mockResolvedValue({
-      from: vi.fn().mockReturnValue({ select: selectMock }),
-    } as any);
+    mockCreateClient.mockResolvedValue({ rpc: rpcMock } as any);
 
     const result = await getAvailableSlots("2026-06-01");
 
@@ -108,15 +97,9 @@ describe("getAvailableSlots", () => {
     expect(result.error).toBe("DB error");
   });
 
-  it("returns empty array when no slots exist for a date", async () => {
-    const orderMock = vi.fn().mockResolvedValue({ data: [], error: null });
-    const eqBlockedMock = vi.fn().mockReturnValue({ order: orderMock });
-    const eqDateMock = vi.fn().mockReturnValue({ eq: eqBlockedMock });
-    const selectMock = vi.fn().mockReturnValue({ eq: eqDateMock });
-
-    mockCreateClient.mockResolvedValue({
-      from: vi.fn().mockReturnValue({ select: selectMock }),
-    } as any);
+  it("returns empty array when no slots are available for a date", async () => {
+    const rpcMock = vi.fn().mockResolvedValue({ data: [], error: null });
+    mockCreateClient.mockResolvedValue({ rpc: rpcMock } as any);
 
     const result = await getAvailableSlots("2026-06-01");
 

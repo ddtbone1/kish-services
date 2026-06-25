@@ -99,6 +99,27 @@ describe("createBookingSchema", () => {
     expect(result.success).toBe(false);
   });
 
+  it("fails when service_ids contains duplicates", () => {
+    const dupe = "660e8400-e29b-41d4-a716-446655440000";
+    const result = createBookingSchema.safeParse({
+      ...VALID_INPUT,
+      service_ids: [dupe, dupe],
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.flatten().fieldErrors.service_ids).toBeTruthy();
+    }
+  });
+
+  it("fails when add_on_ids contains duplicates", () => {
+    const dupe = "770e8400-e29b-41d4-a716-446655440000";
+    const result = createBookingSchema.safeParse({
+      ...VALID_INPUT,
+      add_on_ids: [dupe, dupe],
+    });
+    expect(result.success).toBe(false);
+  });
+
   it("fails when customer_email is invalid", () => {
     const result = createBookingSchema.safeParse({
       ...VALID_INPUT,

@@ -6,6 +6,7 @@
 
 import { BookingDatePicker } from "@/components/booking/BookingDatePicker";
 import { cn } from "@/lib/utils";
+import { formatTime } from "@/lib/utils/datetime";
 import type { AddOn, AvailabilitySlot, Service } from "@/types";
 import { format } from "date-fns";
 import { Check } from "lucide-react";
@@ -25,12 +26,6 @@ const CARD_TINTS = [
 ];
 
 const PROGRESS_LABELS = ["Service", "Date & Time", "Your Details"];
-
-function formatTime(time: string): string {
-  const [h, m] = time.split(":");
-  const hour = parseInt(h, 10);
-  return `${hour % 12 || 12}:${m} ${hour >= 12 ? "PM" : "AM"}`;
-}
 
 export function BookingForm({
   services,

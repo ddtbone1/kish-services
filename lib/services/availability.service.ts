@@ -26,20 +26,27 @@ export async function getSlotsByDateRange(
   return { data: data as AvailabilitySlot[], error: null };
 }
 
+/**
+ * Returns slots that are publicly bookable for a date: not blocked, still in
+ * the future (Asia/Manila), and not already held by an active booking.
+ *
+ * Backed by the get_available_slots() Postgres function so reserved slots are
+ * excluded in a single set-based query (no client-side join against bookings,
+ * which anon cannot read under RLS).
+ *
+ * @since 2026-05-21 (reserved-slot exclusion added 2026-06-24)
+ */
 export async function getAvailableSlots(
   date: string,
 ): Promise<{ data: AvailabilitySlot[] | null; error: string | null }> {
   const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("availability_slots")
-    .select("*")
-    .eq("date", date)
-    .eq("is_blocked", false)
-    .order("start_time", { ascending: true });
+  const { data, error } = await supabase.rpc("get_available_slots", {
+    p_date: date,
+  });
 
   if (error) return { data: null, error: error.message };
-  return { data: data as AvailabilitySlot[], error: null };
+  return { data: (data ?? []) as AvailabilitySlot[], error: null };
 }
 
 export async function createSlot(

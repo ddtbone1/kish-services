@@ -5,6 +5,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { formatTime } from "@/lib/utils/datetime";
 import type { AvailabilitySlot } from "@/types";
 import { ChevronLeft, ChevronRight, Loader2, Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -15,12 +16,6 @@ function getMonthBounds(year: number, month: number) {
   const from = new Date(year, month, 1).toISOString().split("T")[0];
   const to = new Date(year, month + 1, 0).toISOString().split("T")[0];
   return { from, to };
-}
-
-function formatTime(time: string): string {
-  const [h, m] = time.split(":");
-  const hour = parseInt(h, 10);
-  return `${hour % 12 || 12}:${m} ${hour >= 12 ? "PM" : "AM"}`;
 }
 
 function padDate(n: number) {

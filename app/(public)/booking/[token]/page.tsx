@@ -5,6 +5,7 @@ import { BOOKING_STATUS } from "@/lib/constants/booking";
 import { getBookingByToken } from "@/lib/services/booking.service";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
+import { formatTime } from "@/lib/utils/datetime";
 import type { AvailabilitySlot } from "@/types";
 import { Check, ExternalLink, MapPin } from "lucide-react";
 import type { Metadata } from "next";
@@ -22,12 +23,6 @@ async function getSlot(slotId: string): Promise<AvailabilitySlot | null> {
     .eq("id", slotId)
     .single();
   return (data as AvailabilitySlot) ?? null;
-}
-
-function formatTime(time: string): string {
-  const [h, m] = time.split(":");
-  const hour = parseInt(h, 10);
-  return `${hour % 12 || 12}:${m} ${hour >= 12 ? "PM" : "AM"}`;
 }
 
 const TIMELINE_STEPS: BookingStatus[] = [
@@ -56,7 +51,7 @@ export default async function BookingStatusPage({
 
   if (error || !booking) {
     return (
-      <main className="flex flex-col items-center px-4 py-8 md:py-16">
+      <main className="flex flex-col items-center px-4 pt-24 md:pt-28 py-8 md:py-16">
         <div className="w-full max-w-md">
           <div className="bg-card rounded-3xl p-8 text-center shadow-[var(--shadow-card)]">
             <h1 className="text-xl font-bold mb-3">Booking Not Found</h1>
@@ -107,7 +102,7 @@ export default async function BookingStatusPage({
   )}`;
 
   return (
-    <main className="flex flex-col items-center px-4 py-8 md:py-16">
+    <main className="flex flex-col items-center px-4 pt-24 md:pt-28 py-8 md:py-16">
       <div className="w-full max-w-lg flex flex-col gap-6">
         {/* Status hero */}
         <div className="bg-card rounded-3xl p-6 shadow-[var(--shadow-card)] flex flex-col items-center gap-3 text-center">

@@ -73,6 +73,11 @@ export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  // Only the home page has a dark hero image; all other pages have light backgrounds
+  const hasDarkHero = pathname === "/";
+  // Use dark text when on a light-background page OR when scrolled (white navbar)
+  const useDarkText = !hasDarkHero || isScrolled;
+
   useEffect(() => {
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 20);
@@ -86,66 +91,77 @@ export function Navbar() {
       {/* Desktop: Full-width sticky header with dynamic scroll effect */}
       <header
         className={cn(
-          "fixed top-0 left-0 right-0 z-50 hidden md:flex h-20 items-center justify-between px-8 transition-all duration-300",
+          "fixed top-0 left-0 right-0 z-50 hidden md:flex items-center transition-all duration-300",
           isScrolled
             ? "bg-white/80 backdrop-blur-xl border-b border-border shadow-sm h-16"
-            : "bg-transparent h-24",
+            : hasDarkHero
+              ? "bg-transparent h-24"
+              : "bg-white/80 backdrop-blur-xl border-b border-border h-20",
         )}
       >
-        {/* Logo Left - Purely Typographical Kish Branding */}
-        <Link
-          href="/"
-          onClick={() => handleNavClick("/")}
-          className="transition-transform hover:scale-105 ml-4 md:ml-8"
-          aria-label="Kish — home"
-        >
-          <span
-            className={cn(
-              "text-xl font-light tracking-[0.2em] uppercase transition-colors",
-              isScrolled ? "text-black" : "text-white",
-            )}
-          >
-            Kish
-          </span>
-        </Link>
-
-        {/* Nav links Center */}
-        <nav
-          className="absolute left-1/2 -translate-x-1/2 flex items-center gap-10"
-          aria-label="Main navigation"
-        >
-          {NAV_ITEMS.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={() => handleNavClick(item.href)}
-              className={cn(
-                "text-sm font-medium transition-all hover:text-accent",
-                isActiveRoute(item.href)
-                  ? "text-accent"
-                  : isScrolled
-                    ? "text-black/70"
-                    : "text-white/90 drop-shadow-md",
-              )}
-              aria-current={isActiveRoute(item.href) ? "page" : undefined}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-
-        {/* CTA Right */}
-        <Link
-          href="/book"
-          onClick={() => handleNavClick("/book")}
+        <div
           className={cn(
-            "rounded-full transition-all flex items-center gap-2 text-sm font-medium shadow-xl group bg-accent text-white",
-            isScrolled ? "px-6 h-10" : "px-8 h-12",
+            "w-full flex items-center justify-between relative h-full transition-all duration-500 ease-in-out px-6 md:px-16",
+            isScrolled
+              ? "max-w-[1024px] mx-auto"
+              : "max-w-[100vw] mx-auto lg:px-24"
           )}
         >
-          Book a Wash
-          <Sparkles className="h-4 w-4 transition-transform group-hover:rotate-12" />
-        </Link>
+          {/* Logo Left - Purely Typographical Kish Branding */}
+          <Link
+            href="/"
+            onClick={() => handleNavClick("/")}
+            className="transition-transform hover:scale-105"
+            aria-label="Kish — home"
+          >
+            <span
+              className={cn(
+                "text-xl font-light tracking-[0.2em] uppercase transition-colors",
+                useDarkText ? "text-black" : "text-white",
+              )}
+            >
+              Kish
+            </span>
+          </Link>
+
+          {/* Nav links Center */}
+          <nav
+            className="absolute left-1/2 -translate-x-1/2 flex items-center gap-10"
+            aria-label="Main navigation"
+          >
+            {NAV_ITEMS.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => handleNavClick(item.href)}
+                className={cn(
+                  "text-sm font-medium transition-all hover:text-accent",
+                  isActiveRoute(item.href)
+                    ? "text-accent"
+                    : useDarkText
+                      ? "text-black/70"
+                      : "text-white/90 drop-shadow-md",
+                )}
+                aria-current={isActiveRoute(item.href) ? "page" : undefined}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+
+          {/* CTA Right */}
+          <Link
+            href="/book"
+            onClick={() => handleNavClick("/book")}
+            className={cn(
+              "rounded-full transition-all flex items-center gap-2 text-sm font-medium shadow-xl group bg-accent text-white",
+              isScrolled ? "px-6 h-10" : "px-8 h-12",
+            )}
+          >
+            Book a Wash
+            <Sparkles className="h-4 w-4 transition-transform group-hover:rotate-12" />
+          </Link>
+        </div>
       </header>
 
       {/* Mobile: Top Bar & Sidebar */}
@@ -156,14 +172,16 @@ export function Navbar() {
             "fixed top-0 left-0 right-0 z-50 flex h-16 items-center justify-between px-6 transition-all duration-300",
             isScrolled
               ? "bg-white/90 backdrop-blur-xl border-b border-border shadow-sm"
-              : "bg-transparent",
+              : hasDarkHero
+                ? "bg-transparent"
+                : "bg-white/90 backdrop-blur-xl border-b border-border",
           )}
         >
           <Link
             href="/"
             className={cn(
               "text-lg font-light tracking-[0.2em] uppercase transition-colors",
-              isScrolled ? "text-black" : "text-white",
+              useDarkText ? "text-black" : "text-white",
             )}
           >
             Kish
@@ -172,7 +190,7 @@ export function Navbar() {
             onClick={() => setIsMobileMenuOpen(true)}
             className={cn(
               "p-2 -mr-2 transition-colors",
-              isScrolled ? "text-black" : "text-white",
+              useDarkText ? "text-black" : "text-white",
             )}
             aria-label="Open menu"
           >

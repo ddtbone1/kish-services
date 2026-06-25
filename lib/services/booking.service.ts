@@ -13,103 +13,73 @@ import type { CreateBookingInput } from "@/lib/validations/booking";
 import type { Booking, BookingWithItems, PublicBooking } from "@/types";
 
 /**
- * Creates a new booking with one or more service packages and optional add-ons.
- * Prices are snapshotted at booking time so future price changes don't affect history.
+ * Discriminates booking-creation failures so the API layer can choose an
+ * HTTP status without parsing error strings.
+ *   "conflict" → slot unavailable / double-booking race  → 409
+ *   "invalid"  → services/add-ons invalid or inactive     → 422
+ *   "error"    → unexpected database/server failure        → 500
+ */
+export type BookingErrorCode = "conflict" | "invalid" | "error";
+
+/** Maps a Postgres SQLSTATE from create_booking() to a BookingErrorCode. */
+function mapBookingError(pgCode: string | undefined): BookingErrorCode {
+  // PT409 = slot conflict (raised); 23505 = unique-index race backstop.
+  if (pgCode === "PT409" || pgCode === "23505") return "conflict";
+  if (pgCode === "PT422") return "invalid";
+  return "error";
+}
+
+/**
+ * Creates a booking atomically via the create_booking() Postgres function.
+ *
+ * The function validates the slot (exists, not blocked, in the future, not
+ * already reserved) and all services/add-ons, then inserts the booking,
+ * booking_items, and booking_add_ons in a single transaction — rolling back
+ * everything on any failure. Concurrent bookings for the same slot are
+ * serialized (row lock) and backstopped by a partial unique index, so only
+ * one can win; the rest surface as "conflict".
+ *
+ * Prices are snapshotted inside the transaction.
  *
  * @param input - Validated booking fields from createBookingSchema
- * @returns { data: PublicBooking | null, error: string | null }
+ * @returns { data, error, code } — `code` is null on success
  * @since 2026-05-21
  */
-export async function createBooking(
-  input: CreateBookingInput,
-): Promise<{ data: PublicBooking | null; error: string | null }> {
-  // Admin client bypasses RLS — security is enforced at the API boundary
-  // (Zod validation) and by server-side token generation.
+export async function createBooking(input: CreateBookingInput): Promise<{
+  data: PublicBooking | null;
+  error: string | null;
+  code: BookingErrorCode | null;
+}> {
+  // Admin client (service_role) — security is enforced at the API boundary
+  // (Zod validation) and inside the SECURITY DEFINER function.
   const supabase = createAdminClient();
-  const referenceToken = crypto.randomUUID();
 
-  const { service_ids, add_on_ids, ...bookingFields } = input;
+  const { data, error } = await supabase.rpc("create_booking", {
+    p_slot_id: input.slot_id,
+    p_service_ids: input.service_ids,
+    p_add_on_ids: input.add_on_ids ?? [],
+    p_customer_name: input.customer_name,
+    p_customer_email: input.customer_email,
+    p_customer_phone: input.customer_phone ?? null,
+    p_address_line1: input.address_line1,
+    p_address_line2: input.address_line2 ?? null,
+    p_city: input.city,
+    p_notes: input.notes ?? null,
+  });
 
-  // 1. Insert the booking header record
-  const { data: booking, error: bookingError } = await supabase
-    .from("bookings")
-    .insert({
-      ...bookingFields,
-      reference_token: referenceToken,
-      status: BOOKING_STATUS.PENDING,
-    })
-    .select(
-      "id, reference_token, slot_id, customer_name, customer_email, customer_phone, address_line1, address_line2, city, notes, status, completed_at, cancelled_at, declined_at, created_at, updated_at",
-    )
-    .single();
-
-  if (bookingError || !booking) {
+  if (error || !data) {
     return {
       data: null,
-      error: bookingError?.message ?? "Failed to create booking",
+      error: error?.message ?? "Failed to create booking",
+      code: error ? mapBookingError(error.code) : "error",
     };
   }
 
-  // 2. Fetch current prices for selected services (snapshot at booking time)
-  const { data: services, error: servicesError } = await supabase
-    .from("services")
-    .select("id, price")
-    .in("id", service_ids)
-    .eq("is_active", true);
-
-  if (servicesError || !services || services.length !== service_ids.length) {
-    return {
-      data: null,
-      error: "One or more selected services are unavailable",
-    };
-  }
-
-  // 3. Insert booking_items (one per selected service)
-  const bookingItems = services.map((s) => ({
-    booking_id: booking.id,
-    service_id: s.id,
-    price_at_booking: s.price,
-  }));
-
-  const { error: itemsError } = await supabase
-    .from("booking_items")
-    .insert(bookingItems);
-
-  if (itemsError) {
-    return { data: null, error: itemsError.message };
-  }
-
-  // 4. Insert booking_add_ons if any were selected
-  if (add_on_ids && add_on_ids.length > 0) {
-    const { data: addOns, error: addOnsError } = await supabase
-      .from("add_ons")
-      .select("id, price")
-      .in("id", add_on_ids)
-      .eq("is_active", true);
-
-    if (addOnsError || !addOns || addOns.length !== add_on_ids.length) {
-      return {
-        data: null,
-        error: "One or more selected add-ons are unavailable",
-      };
-    }
-
-    const bookingAddOns = addOns.map((a) => ({
-      booking_id: booking.id,
-      add_on_id: a.id,
-      price_at_booking: a.price,
-    }));
-
-    const { error: addOnsInsertError } = await supabase
-      .from("booking_add_ons")
-      .insert(bookingAddOns);
-
-    if (addOnsInsertError) {
-      return { data: null, error: addOnsInsertError.message };
-    }
-  }
-
-  return { data: booking as PublicBooking, error: null };
+  // The function returns the full bookings row (RETURNS bookings); strip the
+  // private owner_notes column before returning to the public flow.
+  const { owner_notes: _ownerNotes, ...publicBooking } = data as Booking;
+  void _ownerNotes;
+  return { data: publicBooking as PublicBooking, error: null, code: null };
 }
 
 /**

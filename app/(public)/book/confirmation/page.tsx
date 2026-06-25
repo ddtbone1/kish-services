@@ -1,5 +1,6 @@
 import { getBookingByToken } from "@/lib/services/booking.service";
 import { createClient } from "@/lib/supabase/server";
+import { formatTime } from "@/lib/utils/datetime";
 import type { AvailabilitySlot } from "@/types";
 import { ArrowRight, CheckCircle2, MapPin } from "lucide-react";
 import type { Metadata } from "next";
@@ -19,12 +20,6 @@ async function getSlot(slotId: string): Promise<AvailabilitySlot | null> {
   return (data as AvailabilitySlot) ?? null;
 }
 
-function formatTime(time: string): string {
-  const [h, m] = time.split(":");
-  const hour = parseInt(h, 10);
-  return `${hour % 12 || 12}:${m} ${hour >= 12 ? "PM" : "AM"}`;
-}
-
 const WHATS_NEXT = [
   { n: 1, text: "We'll confirm your booking within 2 hours." },
   { n: 2, text: "You'll receive a confirmation email with your details." },
@@ -40,7 +35,7 @@ export default async function ConfirmationPage({
 
   if (!token) {
     return (
-      <main className="flex flex-col items-center px-4 py-8 md:py-16">
+      <main className="flex flex-col items-center px-4 pt-24 md:pt-28 py-8 md:py-16">
         <div className="w-full max-w-md bg-card rounded-3xl p-8 text-center shadow-[var(--shadow-card)]">
           <h1 className="text-2xl font-bold mb-3">Invalid Link</h1>
           <p className="text-muted-foreground text-sm mb-6">
@@ -66,7 +61,7 @@ export default async function ConfirmationPage({
     : 0;
 
   return (
-    <main className="flex flex-col items-center px-4 py-8 md:py-16">
+    <main className="flex flex-col items-center px-4 pt-24 md:pt-28 py-8 md:py-16">
       <div className="w-full max-w-lg flex flex-col gap-6">
         {/* Success card */}
         <div className="bg-[var(--card-tint-mint)] rounded-3xl p-8 flex flex-col items-center text-center gap-4">

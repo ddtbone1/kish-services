@@ -3,6 +3,7 @@ import { OwnerNotesForm } from "@/components/dashboard/OwnerNotesForm";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import type { BookingStatus } from "@/lib/constants/booking";
 import { createClient } from "@/lib/supabase/server";
+import { formatTime } from "@/lib/utils/datetime";
 import type { OwnerBookingDetail } from "@/types";
 import { ArrowLeft, Clock, ExternalLink, MapPin } from "lucide-react";
 import type { Metadata } from "next";
@@ -12,12 +13,6 @@ import { notFound } from "next/navigation";
 export const metadata: Metadata = {
   title: "Booking Details - Kish Auto Detailing",
 };
-
-function formatTime(time: string): string {
-  const [h, m] = time.split(":");
-  const hour = parseInt(h, 10);
-  return `${hour % 12 || 12}:${m} ${hour >= 12 ? "PM" : "AM"}`;
-}
 
 function formatTs(ts: string | null): string | null {
   if (!ts) return null;
