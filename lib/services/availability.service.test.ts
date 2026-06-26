@@ -6,40 +6,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // ─── Supabase mock ────────────────────────────────────────────────────────────
 
-const mockSelect = vi.fn();
-const mockInsert = vi.fn();
-const mockUpdate = vi.fn();
-const mockDelete = vi.fn();
-const mockRpc = vi.fn();
-const mockSingle = vi.fn();
-const mockEq = vi.fn();
-const mockGte = vi.fn();
-const mockLte = vi.fn();
-const mockOrder = vi.fn();
-
-// Build a chainable query builder mock
-function makeQueryChain(finalResult: unknown) {
-  const chain: Record<string, unknown> = {};
-  const methods = [
-    "select",
-    "insert",
-    "update",
-    "delete",
-    "eq",
-    "gte",
-    "lte",
-    "order",
-    "single",
-  ];
-  methods.forEach((m) => {
-    chain[m] = vi.fn().mockReturnValue(chain);
-  });
-  // The last call resolves the promise
-  (chain.single as ReturnType<typeof vi.fn>).mockResolvedValue(finalResult);
-  (chain.order as ReturnType<typeof vi.fn>).mockResolvedValue(finalResult);
-  return chain;
-}
-
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
 }));
@@ -56,6 +22,7 @@ import {
 } from "./availability.service";
 
 const mockCreateClient = vi.mocked(createClient);
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 // ─── getAvailableSlots ────────────────────────────────────────────────────────
 
@@ -74,7 +41,9 @@ describe("getAvailableSlots", () => {
     ];
 
     const rpcMock = vi.fn().mockResolvedValue({ data: fakeSlots, error: null });
-    mockCreateClient.mockResolvedValue({ rpc: rpcMock } as any);
+    mockCreateClient.mockResolvedValue({
+      rpc: rpcMock,
+    } as unknown as SupabaseClient);
 
     const result = await getAvailableSlots("2026-06-01");
 
@@ -89,7 +58,9 @@ describe("getAvailableSlots", () => {
     const rpcMock = vi
       .fn()
       .mockResolvedValue({ data: null, error: { message: "DB error" } });
-    mockCreateClient.mockResolvedValue({ rpc: rpcMock } as any);
+    mockCreateClient.mockResolvedValue({
+      rpc: rpcMock,
+    } as unknown as SupabaseClient);
 
     const result = await getAvailableSlots("2026-06-01");
 
@@ -99,7 +70,9 @@ describe("getAvailableSlots", () => {
 
   it("returns empty array when no slots are available for a date", async () => {
     const rpcMock = vi.fn().mockResolvedValue({ data: [], error: null });
-    mockCreateClient.mockResolvedValue({ rpc: rpcMock } as any);
+    mockCreateClient.mockResolvedValue({
+      rpc: rpcMock,
+    } as unknown as SupabaseClient);
 
     const result = await getAvailableSlots("2026-06-01");
 
@@ -141,7 +114,7 @@ describe("getTemplates", () => {
 
     mockCreateClient.mockResolvedValue({
       from: vi.fn().mockReturnValue({ select: selectMock }),
-    } as any);
+    } as unknown as SupabaseClient);
 
     const result = await getTemplates();
 
@@ -158,7 +131,7 @@ describe("getTemplates", () => {
 
     mockCreateClient.mockResolvedValue({
       from: vi.fn().mockReturnValue({ select: selectMock }),
-    } as any);
+    } as unknown as SupabaseClient);
 
     const result = await getTemplates();
 
@@ -190,7 +163,7 @@ describe("createTemplate", () => {
 
     mockCreateClient.mockResolvedValue({
       from: vi.fn().mockReturnValue({ insert: insertMock }),
-    } as any);
+    } as unknown as SupabaseClient);
 
     const result = await createTemplate({
       day_of_week: 3,
@@ -213,7 +186,7 @@ describe("createTemplate", () => {
 
     mockCreateClient.mockResolvedValue({
       from: vi.fn().mockReturnValue({ insert: insertMock }),
-    } as any);
+    } as unknown as SupabaseClient);
 
     const result = await createTemplate({
       day_of_week: 3,
@@ -239,7 +212,7 @@ describe("deleteTemplate", () => {
 
     mockCreateClient.mockResolvedValue({
       from: vi.fn().mockReturnValue({ delete: deleteMock }),
-    } as any);
+    } as unknown as SupabaseClient);
 
     const result = await deleteTemplate("t-1");
 
@@ -255,7 +228,7 @@ describe("deleteTemplate", () => {
 
     mockCreateClient.mockResolvedValue({
       from: vi.fn().mockReturnValue({ delete: deleteMock }),
-    } as any);
+    } as unknown as SupabaseClient);
 
     const result = await deleteTemplate("t-missing");
 
@@ -273,7 +246,7 @@ describe("generateSlotsFromTemplates", () => {
 
     mockCreateClient.mockResolvedValue({
       rpc: rpcMock,
-    } as any);
+    } as unknown as SupabaseClient);
 
     const result = await generateSlotsFromTemplates({
       from: "2026-06-01",
@@ -295,7 +268,7 @@ describe("generateSlotsFromTemplates", () => {
 
     mockCreateClient.mockResolvedValue({
       rpc: rpcMock,
-    } as any);
+    } as unknown as SupabaseClient);
 
     const result = await generateSlotsFromTemplates({
       from: "2026-06-01",

@@ -54,7 +54,7 @@ export function DashboardSidebar() {
     <>
       {/* Desktop sidebar */}
       <aside className="hidden md:flex w-64 shrink-0 flex-col bg-sidebar px-4 py-6 min-h-screen border-r border-sidebar-border">
-        <SidebarContent pathname={pathname} isActive={isActive} />
+        <SidebarContent isActive={isActive} />
       </aside>
 
       {/* Mobile bottom dock */}
@@ -91,10 +91,8 @@ export function DashboardSidebar() {
 
 /** Shared sidebar content — rendered only on desktop */
 function SidebarContent({
-  pathname,
   isActive,
 }: {
-  pathname: string;
   isActive: (href: string, exact: boolean) => boolean;
 }) {
   return (

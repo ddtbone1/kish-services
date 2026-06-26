@@ -19,7 +19,7 @@ export function FaqList({ faqs }: Props) {
   const [editingFaq, setEditingFaq] = useState<FaqEntry | null>(null);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
 
   function handleDelete(id: string) {
     if (!confirm("Delete this FAQ entry? This cannot be undone.")) return;

@@ -69,13 +69,28 @@ export function BookingForm({
 
   useEffect(() => {
     if (step !== 2 || !selectedDate) return;
-    setSlotsLoading(true);
-    setSelectedSlotId("");
-    fetch(`/api/availability?date=${selectedDate}`)
-      .then((r) => r.json())
-      .then((json) => setSlots(json.data ?? []))
-      .catch(() => setSlots([]))
-      .finally(() => setSlotsLoading(false));
+    let cancelled = false;
+
+    const timer = window.setTimeout(() => {
+      setSlotsLoading(true);
+      setSelectedSlotId("");
+      fetch(`/api/availability?date=${selectedDate}`)
+        .then((r) => r.json())
+        .then((json) => {
+          if (!cancelled) setSlots(json.data ?? []);
+        })
+        .catch(() => {
+          if (!cancelled) setSlots([]);
+        })
+        .finally(() => {
+          if (!cancelled) setSlotsLoading(false);
+        });
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, [selectedDate, step]);
 
   function toggleService(id: string) {

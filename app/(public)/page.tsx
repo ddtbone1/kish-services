@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Service } from "@/types";
-import { Car, Clock, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
+import Image from "next/image";
 import type { Metadata } from "next";
 import Link from "next/link";
 import ServicesCarousel from "@/components/shared/ServicesCarousel";
@@ -22,24 +23,6 @@ async function getServices(): Promise<Service[]> {
   return (data as Service[]) ?? [];
 }
 
-const HOW_STEPS = [
-  {
-    n: 1,
-    title: "Choose",
-    copy: "Pick your package and any add-ons you'd like.",
-  },
-  {
-    n: 2,
-    title: "Book",
-    copy: "Select a date and time that works for you.",
-  },
-  {
-    n: 3,
-    title: "We Come to You",
-    copy: "Our team arrives at your location — you relax.",
-  },
-];
-
 export default async function HomePage() {
   const services = await getServices();
 
@@ -48,9 +31,12 @@ export default async function HomePage() {
       {/* Hero */}
       <section className="relative min-h-[90vh] flex items-center justify-start overflow-hidden pt-20">
         <div className="absolute inset-0 z-0">
-          <img
+          <Image
             src="/hero-bg.jpg"
             alt="Car Detailing"
+            fill
+            priority
+            sizes="100vw"
             className="w-full h-full object-cover"
           />
           <div className="absolute inset-0 bg-black/40" />

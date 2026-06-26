@@ -27,6 +27,10 @@ vi.mock("@/lib/services/email.service", () => ({
   sendBookingEmail: mockSendBookingEmail,
 }));
 
+vi.mock("next/cache", () => ({
+  revalidateTag: vi.fn(),
+}));
+
 // Import route handler after mocks are declared
 import { PATCH } from "./route";
 

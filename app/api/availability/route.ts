@@ -1,3 +1,10 @@
+// Feature: Response Caching
+// Purpose: Public slot availability cached per-date for 60 s. The calendar
+//          component polls monthly; caching prevents redundant DB reads.
+//          Cache is invalidated when slots are created/blocked/generated or
+//          when a booking is created (see POST /api/bookings).
+// Updated: 2026-06-25
+
 import {
   createSlot,
   getAvailableSlots,
@@ -6,6 +13,15 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { createSlotSchema } from "@/lib/validations/availability";
 import { NextResponse, type NextRequest } from "next/server";
+import { revalidateTag, unstable_cache } from "next/cache";
+
+function getCachedSlotsForDate(date: string) {
+  return unstable_cache(
+    () => getAvailableSlots(date),
+    [`availability-${date}`],
+    { revalidate: 60, tags: [`availability-${date}`, "availability"] },
+  )();
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -13,7 +29,7 @@ export async function GET(request: NextRequest) {
   const from = searchParams.get("from");
   const to = searchParams.get("to");
 
-  // Range query — used by the owner schedule calendar
+  // Range query — used by the owner schedule calendar (auth required)
   if (from && to) {
     const supabase = await createClient();
     const {
@@ -34,7 +50,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ data });
   }
 
-  // Single-date query — used by the public booking form
+  // Single-date query — used by the public booking form (cached)
   if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return NextResponse.json(
       {
@@ -45,7 +61,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const { data, error } = await getAvailableSlots(date);
+  const { data, error } = await getCachedSlotsForDate(date);
   if (error) return NextResponse.json({ error }, { status: 500 });
   return NextResponse.json({ data });
 }
@@ -71,6 +87,10 @@ export async function POST(request: NextRequest) {
 
     const { data, error } = await createSlot(parsed.data);
     if (error) return NextResponse.json({ error }, { status: 400 });
+
+    // Invalidate cache for the affected date
+    revalidateTag(`availability-${parsed.data.date}`, "max");
+
     return NextResponse.json({ data }, { status: 201 });
   } catch {
     return NextResponse.json(

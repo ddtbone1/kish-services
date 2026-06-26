@@ -88,7 +88,11 @@ export function WeeklyTemplatePanel() {
   // Fetch when panel is first opened
   useEffect(() => {
     if (open && templates.length === 0 && !loading) {
-      fetchTemplates();
+      const timer = window.setTimeout(() => {
+        fetchTemplates();
+      }, 0);
+
+      return () => window.clearTimeout(timer);
     }
   }, [open, templates.length, loading, fetchTemplates]);
 

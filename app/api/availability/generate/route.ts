@@ -6,6 +6,7 @@ import { generateSlotsFromTemplates } from "@/lib/services/availability.service"
 import { createClient } from "@/lib/supabase/server";
 import { generateSlotsSchema } from "@/lib/validations/availability";
 import { NextResponse, type NextRequest } from "next/server";
+import { revalidateTag } from "next/cache";
 
 // ─── POST /api/availability/generate ─────────────────────────────────────────
 // Body: { from: "YYYY-MM-DD", to: "YYYY-MM-DD" }
@@ -59,6 +60,9 @@ export async function POST(request: NextRequest) {
     if (error) {
       return NextResponse.json({ error }, { status: 500 });
     }
+
+    // Invalidate all availability caches — generated slots can span many dates.
+    revalidateTag("availability", "max");
 
     return NextResponse.json({ data: { inserted: data } });
   } catch {

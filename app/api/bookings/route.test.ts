@@ -1,6 +1,6 @@
 // Feature: Public Booking Creation Route
-// Purpose: Unit tests for POST /api/bookings — validation + status mapping
-// Added: 2026-06-24
+// Purpose: Unit tests for POST /api/bookings — validation, idempotency, status mapping
+// Updated: 2026-06-25
 
 import { BOOKING_STATUS } from "@/lib/constants/booking";
 import type { PublicBooking } from "@/types";
@@ -13,6 +13,10 @@ const mockCreateBooking = vi.hoisted(() => vi.fn());
 const mockSendBookingEmail = vi.hoisted(() => vi.fn());
 const mockSendAdminNotification = vi.hoisted(() => vi.fn());
 const mockCheckRateLimit = vi.hoisted(() => vi.fn());
+const mockCheckIdempotencyKey = vi.hoisted(() => vi.fn());
+const mockStoreIdempotencyKey = vi.hoisted(() => vi.fn());
+const mockHashBody = vi.hoisted(() => vi.fn(() => "deadbeef"));
+const mockRevalidateTag = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/services/booking.service", () => ({
   createBooking: mockCreateBooking,
@@ -26,6 +30,25 @@ vi.mock("@/lib/services/email.service", () => ({
 vi.mock("@/lib/rate-limit", () => ({
   checkRateLimit: mockCheckRateLimit,
   getClientIp: vi.fn(() => "127.0.0.1"),
+}));
+
+vi.mock("@/lib/idempotency", () => ({
+  checkIdempotencyKey: mockCheckIdempotencyKey,
+  storeIdempotencyKey: mockStoreIdempotencyKey,
+  hashBody: mockHashBody,
+}));
+
+// withRequestContext just calls fn() directly — no AsyncLocalStorage in tests
+vi.mock("@/lib/utils/with-request-context", () => ({
+  withRequestContext: vi.fn((_req: unknown, fn: () => Promise<unknown>) => fn()),
+}));
+
+vi.mock("@/lib/logger", () => ({
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
+vi.mock("next/cache", () => ({
+  revalidateTag: mockRevalidateTag,
 }));
 
 import { POST } from "./route";
@@ -63,10 +86,10 @@ function makeBooking(overrides: Partial<PublicBooking> = {}): PublicBooking {
   };
 }
 
-function makePostRequest(body: unknown): NextRequest {
+function makePostRequest(body: unknown, headers?: Record<string, string>): NextRequest {
   return new NextRequest("http://localhost/api/bookings", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(body),
   });
 }
@@ -76,12 +99,16 @@ function makePostRequest(body: unknown): NextRequest {
 describe("POST /api/bookings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockCheckRateLimit.mockReturnValue({ limited: false, retryAfter: 0 });
+    // checkRateLimit is now async
+    mockCheckRateLimit.mockResolvedValue({ limited: false, retryAfter: 0 });
     mockSendBookingEmail.mockResolvedValue({ error: null });
     mockSendAdminNotification.mockResolvedValue({ error: null });
+    // Default: no idempotency key used (fresh key)
+    mockCheckIdempotencyKey.mockResolvedValue({ status: "new" });
+    mockStoreIdempotencyKey.mockResolvedValue(undefined);
   });
 
-  it("returns 201 and triggers notifications on success", async () => {
+  it("returns 201 and notifies owner but does NOT email customer on submission", async () => {
     mockCreateBooking.mockResolvedValue({
       data: makeBooking(),
       error: null,
@@ -93,12 +120,13 @@ describe("POST /api/bookings", () => {
     expect(res.status).toBe(201);
     const json = await res.json();
     expect(json.data.id).toBe("booking-001");
-    expect(mockSendBookingEmail).toHaveBeenCalledOnce();
+    // Customer email is deferred until owner confirms/declines — not sent on submission
+    expect(mockSendBookingEmail).not.toHaveBeenCalled();
     expect(mockSendAdminNotification).toHaveBeenCalledOnce();
   });
 
   it("returns 429 when rate limited without calling the service", async () => {
-    mockCheckRateLimit.mockReturnValue({ limited: true, retryAfter: 1800 });
+    mockCheckRateLimit.mockResolvedValue({ limited: true, retryAfter: 1800 });
 
     const res = await POST(makePostRequest(VALID_BODY));
 
@@ -158,5 +186,103 @@ describe("POST /api/bookings", () => {
     const res = await POST(makePostRequest(VALID_BODY));
 
     expect(res.status).toBe(500);
+  });
+
+  // ─── Idempotency ────────────────────────────────────────────────────────────
+
+  describe("Idempotency-Key header", () => {
+    const KEY = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
+
+    it("returns 200 with cached response on replay", async () => {
+      mockCheckIdempotencyKey.mockResolvedValue({
+        status: "replay",
+        record: {
+          response_body: { data: { id: "cached-booking" } },
+          status_code: 201,
+        },
+      });
+
+      const res = await POST(
+        makePostRequest(VALID_BODY, { "idempotency-key": KEY }),
+      );
+
+      expect(res.status).toBe(201);
+      const json = await res.json();
+      expect(json.data.id).toBe("cached-booking");
+      // Should NOT reach the booking service
+      expect(mockCreateBooking).not.toHaveBeenCalled();
+    });
+
+    it("returns 422 when same key is reused with a different body", async () => {
+      mockCheckIdempotencyKey.mockResolvedValue({ status: "hash_mismatch" });
+
+      const res = await POST(
+        makePostRequest(VALID_BODY, { "idempotency-key": KEY }),
+      );
+
+      expect(res.status).toBe(422);
+      const json = await res.json();
+      expect(json.error).toContain("Idempotency-Key");
+      expect(mockCreateBooking).not.toHaveBeenCalled();
+    });
+
+    it("returns 500 when idempotency DB check itself errors", async () => {
+      mockCheckIdempotencyKey.mockResolvedValue({
+        status: "error",
+        error: "DB connection failed",
+      });
+
+      const res = await POST(
+        makePostRequest(VALID_BODY, { "idempotency-key": KEY }),
+      );
+
+      expect(res.status).toBe(500);
+      expect(mockCreateBooking).not.toHaveBeenCalled();
+    });
+
+    it("stores the idempotency key after a successful booking creation", async () => {
+      mockCreateBooking.mockResolvedValue({
+        data: makeBooking(),
+        error: null,
+        code: null,
+      });
+
+      await POST(makePostRequest(VALID_BODY, { "idempotency-key": KEY }));
+
+      expect(mockStoreIdempotencyKey).toHaveBeenCalledOnce();
+      expect(mockStoreIdempotencyKey).toHaveBeenCalledWith(
+        KEY,
+        "deadbeef",
+        expect.objectContaining({ data: expect.any(Object) }),
+        201,
+      );
+    });
+
+    it("does NOT store idempotency key when booking creation fails", async () => {
+      mockCreateBooking.mockResolvedValue({
+        data: null,
+        error: "slot conflict",
+        code: "conflict",
+      });
+
+      await POST(makePostRequest(VALID_BODY, { "idempotency-key": KEY }));
+
+      expect(mockStoreIdempotencyKey).not.toHaveBeenCalled();
+    });
+
+    it("proceeds normally when no Idempotency-Key header is sent", async () => {
+      mockCreateBooking.mockResolvedValue({
+        data: makeBooking(),
+        error: null,
+        code: null,
+      });
+
+      const res = await POST(makePostRequest(VALID_BODY));
+
+      expect(res.status).toBe(201);
+      // checkIdempotencyKey should NOT have been called without the header
+      expect(mockCheckIdempotencyKey).not.toHaveBeenCalled();
+      expect(mockStoreIdempotencyKey).not.toHaveBeenCalled();
+    });
   });
 });

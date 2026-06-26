@@ -16,11 +16,7 @@ interface Message {
 }
 
 export function ChatWidget() {
-  const sessionId = useRef<string>(
-    typeof crypto !== "undefined"
-      ? crypto.randomUUID()
-      : Math.random().toString(36),
-  );
+  const sessionId = useRef<string>("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -42,6 +38,13 @@ export function ChatWidget() {
     setLoading(true);
 
     try {
+      if (!sessionId.current) {
+        sessionId.current =
+          typeof crypto !== "undefined"
+            ? crypto.randomUUID()
+            : Math.random().toString(36);
+      }
+
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

@@ -55,6 +55,7 @@ export const EMAIL_STATUS = {
   SENT: "sent",
   FAILED: "failed",
   BOUNCED: "bounced",
+  PENDING: "pending",
 } as const;
 
 export type EmailStatus = (typeof EMAIL_STATUS)[keyof typeof EMAIL_STATUS];

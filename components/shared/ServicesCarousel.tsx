@@ -76,7 +76,7 @@ export default function ServicesCarousel({ services }: ServicesCarouselProps) {
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
 
-  const handleScroll = () => {
+  const handleScroll = React.useCallback(() => {
     if (scrollRef.current) {
       const container = scrollRef.current;
       const { scrollLeft, scrollWidth, clientWidth } = container;
@@ -100,7 +100,7 @@ export default function ServicesCarousel({ services }: ServicesCarouselProps) {
 
       setActiveIndex(closestIndex);
     }
-  };
+  }, []);
 
   useEffect(() => {
     const container = scrollRef.current;
@@ -116,7 +116,7 @@ export default function ServicesCarousel({ services }: ServicesCarouselProps) {
       }
       window.removeEventListener("resize", handleScroll);
     };
-  }, []);
+  }, [handleScroll]);
 
   const scroll = (direction: "left" | "right") => {
     if (scrollRef.current) {
@@ -127,7 +127,8 @@ export default function ServicesCarousel({ services }: ServicesCarouselProps) {
       const cardWidth = firstChild.clientWidth;
       const style = window.getComputedStyle(container);
       const gap = parseInt(style.columnGap || style.gap || "24", 10);
-      const scrollAmount = direction === "left" ? -(cardWidth + gap) : (cardWidth + gap);
+      const scrollAmount =
+        direction === "left" ? -(cardWidth + gap) : cardWidth + gap;
 
       container.scrollBy({ left: scrollAmount, behavior: "smooth" });
     }
@@ -202,7 +203,7 @@ export default function ServicesCarousel({ services }: ServicesCarouselProps) {
         ref={scrollRef}
         className="flex overflow-x-auto gap-6 pb-8 -mx-6 md:-mx-16 lg:-mx-24 px-6 md:px-16 lg:px-24 scrollbar-none snap-x snap-mandatory scroll-smooth"
       >
-        {services.map((service, i) => {
+        {services.map((service) => {
           const config = getServiceConfig(service.name);
           const IconComponent = config.icon;
 
@@ -275,7 +276,9 @@ export default function ServicesCarousel({ services }: ServicesCarouselProps) {
               onClick={() => scrollToCard(index)}
               aria-label={`Go to service slide ${index + 1}`}
               className={`h-2.5 rounded-full transition-all duration-300 cursor-pointer ${
-                activeIndex === index ? "w-8 bg-accent" : "w-2.5 bg-border hover:bg-muted-foreground/30"
+                activeIndex === index
+                  ? "w-8 bg-accent"
+                  : "w-2.5 bg-border hover:bg-muted-foreground/30"
               }`}
             />
           ))}

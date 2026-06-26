@@ -1,6 +1,6 @@
 // Feature: Dashboard
 // Purpose: Unit tests for dashboard.service.ts (metrics + booking list)
-// Added: 2026-06-24
+// Updated: 2026-06-25 — updated mocks for rpc("get_booking_counts") refactor
 
 import { BOOKING_STATUS } from "@/lib/constants/booking";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,9 +8,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
 const mockServerFrom = vi.hoisted(() => vi.fn());
+const mockServerRpc = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/supabase/server", () => ({
-  createClient: vi.fn(async () => ({ from: mockServerFrom })),
+  createClient: vi.fn(async () => ({
+    from: mockServerFrom,
+    rpc: mockServerRpc,
+  })),
 }));
 
 import { getBookings, getDashboardMetrics } from "./dashboard.service";
@@ -47,12 +51,6 @@ function makeQuery(result: QueryResult) {
   return builder;
 }
 
-/** Queues per-call `from()` results in invocation order. */
-function queueFromResults(results: QueryResult[]) {
-  let i = 0;
-  mockServerFrom.mockImplementation(() => makeQuery(results[i++]));
-}
-
 // ─── getDashboardMetrics ──────────────────────────────────────────────────────
 
 describe("getDashboardMetrics", () => {
@@ -60,19 +58,26 @@ describe("getDashboardMetrics", () => {
     vi.clearAllMocks();
   });
 
-  it("aggregates per-status counts, total, completedToday and upcoming", async () => {
-    // Order of from() calls: 6 status counts (pending, confirmed, on_the_way,
-    // completed, cancelled, declined), then completedToday, then upcoming.
-    queueFromResults([
-      { count: 0, error: null }, // pending
-      { count: 0, error: null }, // confirmed
-      { count: 0, error: null }, // on_the_way
-      { count: 2, error: null }, // completed
-      { count: 0, error: null }, // cancelled
-      { count: 1, error: null }, // declined
-      { count: 0, error: null }, // completedToday
-      { count: 0, error: null }, // upcoming
-    ]);
+  it("aggregates per-status counts, total, completedToday and upcoming via rpc", async () => {
+    // rpc("get_booking_counts") returns aggregated row in data array
+    mockServerRpc.mockResolvedValue({
+      data: [
+        {
+          pending: 0n,
+          confirmed: 0n,
+          on_the_way: 0n,
+          completed: 2n,
+          cancelled: 0n,
+          declined: 1n,
+          total: 3n,
+          completed_today: 0n,
+        },
+      ],
+      error: null,
+    });
+
+    // from("bookings") for upcoming join query
+    mockServerFrom.mockReturnValue(makeQuery({ count: 0, error: null }));
 
     const { data, error } = await getDashboardMetrics();
 
@@ -86,28 +91,48 @@ describe("getDashboardMetrics", () => {
       cancelled: 0,
       declined: 1,
     });
-    // Matches the live data: 3 total bookings (2 completed + 1 declined).
     expect(data!.total).toBe(3);
     expect(data!.completedToday).toBe(0);
     expect(data!.upcoming).toBe(0);
+
+    // rpc was called with the correct function name
+    expect(mockServerRpc).toHaveBeenCalledWith(
+      "get_booking_counts",
+      expect.objectContaining({ p_start: expect.any(String), p_end: expect.any(String) }),
+    );
   });
 
-  it("propagates a Supabase error instead of coercing to zero", async () => {
-    queueFromResults([
-      { count: 0, error: null }, // pending
-      { count: null, error: { message: "db exploded" } }, // confirmed fails
-      { count: 0, error: null },
-      { count: 0, error: null },
-      { count: 0, error: null },
-      { count: 0, error: null },
-      { count: 0, error: null },
-      { count: 0, error: null },
-    ]);
+  it("propagates a Supabase rpc error instead of coercing to zero", async () => {
+    mockServerRpc.mockResolvedValue({
+      data: null,
+      error: { message: "db exploded" },
+    });
+    // upcoming query — not reached but mock it to avoid null dereference
+    mockServerFrom.mockReturnValue(makeQuery({ count: 0, error: null }));
 
     const { data, error } = await getDashboardMetrics();
 
     expect(data).toBeNull();
     expect(error).toBe("db exploded");
+  });
+
+  it("propagates the upcoming query error", async () => {
+    mockServerRpc.mockResolvedValue({
+      data: [
+        {
+          pending: 0n, confirmed: 0n, on_the_way: 0n,
+          completed: 0n, cancelled: 0n, declined: 0n,
+          total: 0n, completed_today: 0n,
+        },
+      ],
+      error: null,
+    });
+    mockServerFrom.mockReturnValue(makeQuery({ count: null, error: { message: "upcoming failed" } }));
+
+    const { data, error } = await getDashboardMetrics();
+
+    expect(data).toBeNull();
+    expect(error).toBe("upcoming failed");
   });
 });
 

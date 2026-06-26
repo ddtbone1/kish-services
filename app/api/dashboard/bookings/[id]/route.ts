@@ -8,6 +8,7 @@ import { sendBookingEmail } from "@/lib/services/email.service";
 import { createClient } from "@/lib/supabase/server";
 import { updateBookingStatusSchema } from "@/lib/validations/booking";
 import { NextResponse, type NextRequest } from "next/server";
+import { revalidateTag } from "next/cache";
 import { z } from "zod";
 
 const updateNotesSchema = z.object({
@@ -76,6 +77,10 @@ export async function PATCH(
           }).catch(console.error);
         }
       }
+
+      // Invalidate the cached dashboard metrics so the next page load reflects
+      // the new status counts without waiting for the 60-second TTL.
+      revalidateTag("dashboard-metrics", "max");
 
       return NextResponse.json({ data });
     }

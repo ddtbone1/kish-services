@@ -54,7 +54,11 @@ export function ScheduleCalendar() {
   }, []);
 
   useEffect(() => {
-    fetchSlots(viewYear, viewMonth);
+    const timer = window.setTimeout(() => {
+      fetchSlots(viewYear, viewMonth);
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [viewYear, viewMonth, fetchSlots]);
 
   function goToPrevMonth() {

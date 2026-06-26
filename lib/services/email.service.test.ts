@@ -10,7 +10,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Use vi.hoisted so these are available when vi.mock factories are evaluated
 const mockSendMail = vi.hoisted(() => vi.fn());
-const mockInsert = vi.hoisted(() => vi.fn());
 const mockFrom = vi.hoisted(() => vi.fn());
 
 vi.mock("nodemailer", () => ({
@@ -23,6 +22,11 @@ vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: vi.fn(() => ({
     from: mockFrom,
   })),
+}));
+
+vi.mock("@/lib/logger", () => ({
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+  requestContext: { getStore: vi.fn() },
 }));
 
 // Import after mocks are set up
@@ -118,12 +122,18 @@ describe("sendAdminNotification", () => {
   });
 
   it("logs status=failed when nodemailer throws", async () => {
+    // Use fake timers so the retry delays (1s, 4s, 16s) complete instantly
+    vi.useFakeTimers();
     mockSendMail.mockRejectedValue(new Error("connection refused"));
 
     const insertMock = vi.fn().mockResolvedValue({ error: null });
     mockFrom.mockReturnValue({ insert: insertMock });
 
-    const result = await sendAdminNotification(makeBooking());
+    const promise = sendAdminNotification(makeBooking());
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    vi.useRealTimers();
 
     expect(result.error).toBe("connection refused");
     const insertArg = insertMock.mock.calls[0][0];
@@ -141,12 +151,18 @@ describe("sendAdminNotification", () => {
   });
 
   it("returns error and logs failure when nodemailer throws", async () => {
+    // Use fake timers so the retry delays (1s, 4s, 16s) complete instantly
+    vi.useFakeTimers();
     mockSendMail.mockRejectedValue(new Error("network timeout"));
 
     const insertMock = vi.fn().mockResolvedValue({ error: null });
     mockFrom.mockReturnValue({ insert: insertMock });
 
-    const result = await sendAdminNotification(makeBooking());
+    const promise = sendAdminNotification(makeBooking());
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    vi.useRealTimers();
 
     expect(result.error).toBe("network timeout");
     const insertArg = insertMock.mock.calls[0][0];

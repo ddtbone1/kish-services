@@ -14,6 +14,15 @@ import {
 import { AlertTriangle, ChevronRight, Inbox } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { unstable_cache } from "next/cache";
+
+// Cache dashboard metrics for 60 s. Invalidated by revalidateTag("dashboard-metrics", "max")
+// in the PATCH /api/dashboard/bookings/[id] route after every status update.
+const getCachedDashboardMetrics = unstable_cache(
+  getDashboardMetrics,
+  ["dashboard-metrics"],
+  { revalidate: 60, tags: ["dashboard-metrics"] },
+);
 
 export const metadata: Metadata = {
   title: "Dashboard - Kish Auto Detailing",
@@ -62,7 +71,7 @@ export default async function DashboardPage({
   const page = parsePage(params.page);
 
   const [metricsRes, bookingsRes] = await Promise.all([
-    getDashboardMetrics(),
+    getCachedDashboardMetrics(),
     getBookings({ status: activeStatus, q: search, page, pageSize: PAGE_SIZE }),
   ]);
 

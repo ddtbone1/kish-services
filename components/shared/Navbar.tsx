@@ -25,13 +25,6 @@ const NAV_ITEMS = [
   { label: "Chat", href: "/chat", icon: MessageCircle },
 ] as const;
 
-const DOCK_ITEMS = [
-  { label: "Home", href: "/", icon: Home },
-  { label: "Services", href: "/#services", icon: Car },
-  { label: "Book", href: "/book", icon: Sparkles },
-  { label: "Chat", href: "/chat", icon: MessageCircle },
-] as const;
-
 /**
  * Public navigation.
  * - Desktop: floating centered top nav pill with brand + links + Book Now CTA
@@ -46,8 +39,6 @@ export function Navbar() {
   const [hash, setHash] = useState("");
 
   useEffect(() => {
-    // Set initial hash from URL
-    setHash(window.location.hash);
     const onHashChange = () => setHash(window.location.hash);
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);

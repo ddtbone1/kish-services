@@ -1,6 +1,6 @@
 // Feature: Dashboard
 // Purpose: Owner-dashboard metrics and booking-list queries (focused service module)
-// Added: 2026-06-24
+// Updated: 2026-06-25 — replaced 8 parallel COUNT queries with single rpc() call
 
 import { BOOKING_STATUS, type BookingStatus } from "@/lib/constants/booking";
 import { createClient } from "@/lib/supabase/server";
@@ -19,8 +19,7 @@ export interface DashboardMetrics {
   completedToday: number;
   /**
    * Active bookings (pending/confirmed/on_the_way) whose scheduled slot date is
-   * today-or-later in Asia/Manila. Day-granularity by design — a same-day slot
-   * earlier than "now" still counts as upcoming for the day.
+   * today-or-later in Asia/Manila. Day-granularity by design.
    */
   upcoming: number;
 }
@@ -32,14 +31,15 @@ const ACTIVE_STATUSES: BookingStatus[] = [
 ];
 
 /**
- * Computes all dashboard metrics with parallel count queries.
+ * Computes all dashboard metrics using 2 database calls.
  *
- * Unlike the previous inline implementation, every query's `error` is inspected
- * and propagated — a failed query yields `{ data: null, error }`, never a silent
- * zero. This lets the UI render a distinct error state.
+ * Previously ran 8 parallel SELECT count(*) queries (one per status + two
+ * derived counts). Now delegates to get_booking_counts() — a SECURITY DEFINER
+ * SQL function that returns all per-status counts and completedToday in a
+ * single table scan with conditional aggregation.
  *
  * @returns { data: DashboardMetrics | null, error: string | null }
- * @since 2026-06-24
+ * @since 2026-06-25
  */
 export async function getDashboardMetrics(): Promise<{
   data: DashboardMetrics | null;
@@ -49,24 +49,11 @@ export async function getDashboardMetrics(): Promise<{
   const today = manilaTodayDate();
   const { startUtcISO, endUtcISO } = manilaDayRangeUtc(today);
 
-  // One count query per status (also feeds the filter-tab counts).
-  const statusList = Object.values(BOOKING_STATUS);
-
-  const [statusResults, completedTodayRes, upcomingRes] = await Promise.all([
-    Promise.all(
-      statusList.map((status) =>
-        supabase
-          .from("bookings")
-          .select("*", { count: "exact", head: true })
-          .eq("status", status),
-      ),
-    ),
-    supabase
-      .from("bookings")
-      .select("*", { count: "exact", head: true })
-      .eq("status", BOOKING_STATUS.COMPLETED)
-      .gte("completed_at", startUtcISO)
-      .lt("completed_at", endUtcISO),
+  const [countsRes, upcomingRes] = await Promise.all([
+    supabase.rpc("get_booking_counts", {
+      p_start: startUtcISO,
+      p_end: endUtcISO,
+    }),
     supabase
       .from("bookings")
       .select("id, availability_slots!inner(date)", {
@@ -77,27 +64,35 @@ export async function getDashboardMetrics(): Promise<{
       .gte("availability_slots.date", today),
   ]);
 
-  // Surface the first error encountered across all queries.
-  const firstStatusError = statusResults.find((r) => r.error)?.error;
-  const firstError =
-    firstStatusError ?? completedTodayRes.error ?? upcomingRes.error;
-  if (firstError) {
-    return { data: null, error: firstError.message };
+  if (countsRes.error) {
+    return { data: null, error: countsRes.error.message };
+  }
+  if (upcomingRes.error) {
+    return { data: null, error: upcomingRes.error.message };
   }
 
-  const counts = statusList.reduce((acc, status, i) => {
-    acc[status] = statusResults[i].count ?? 0;
-    return acc;
-  }, {} as StatusCounts);
+  // RETURNS TABLE gives an array; the aggregation always yields exactly one row.
+  const row = (countsRes.data as Record<string, unknown>[])?.[0];
 
-  const total = statusList.reduce((sum, status) => sum + counts[status], 0);
+  if (!row) {
+    return { data: null, error: "get_booking_counts returned no rows" };
+  }
+
+  const counts: StatusCounts = {
+    [BOOKING_STATUS.PENDING]:    Number(row.pending)    ?? 0,
+    [BOOKING_STATUS.CONFIRMED]:  Number(row.confirmed)  ?? 0,
+    [BOOKING_STATUS.ON_THE_WAY]: Number(row.on_the_way) ?? 0,
+    [BOOKING_STATUS.COMPLETED]:  Number(row.completed)  ?? 0,
+    [BOOKING_STATUS.CANCELLED]:  Number(row.cancelled)  ?? 0,
+    [BOOKING_STATUS.DECLINED]:   Number(row.declined)   ?? 0,
+  };
 
   return {
     data: {
       counts,
-      total,
-      completedToday: completedTodayRes.count ?? 0,
-      upcoming: upcomingRes.count ?? 0,
+      total:          Number(row.total)           ?? 0,
+      completedToday: Number(row.completed_today) ?? 0,
+      upcoming:       upcomingRes.count           ?? 0,
     },
     error: null,
   };
@@ -120,7 +115,6 @@ export interface BookingsPage {
  * owner dashboard list. Errors are propagated rather than coerced to `[]`.
  *
  * @returns { data: { rows, total } | null, error: string | null }
- * @since 2026-06-24
  */
 export async function getBookings({
   status,

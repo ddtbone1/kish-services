@@ -60,43 +60,6 @@ function makePublicBooking(
 }
 
 // Builds a chainable Supabase query mock for admin client (no async createClient)
-function buildAdminChain(result: { data: unknown; error: unknown }) {
-  const single = vi.fn().mockResolvedValue(result);
-  const select = vi.fn().mockReturnValue({ single });
-  const eq = vi.fn().mockReturnValue({ single, select });
-  const update = vi
-    .fn()
-    .mockReturnValue({
-      eq: vi
-        .fn()
-        .mockReturnValue({ select: vi.fn().mockReturnValue({ single }) }),
-    });
-  const insert = vi
-    .fn()
-    .mockReturnValue({ select: vi.fn().mockReturnValue({ single }) });
-  const inFn = vi
-    .fn()
-    .mockReturnValue({ eq: vi.fn().mockReturnValue({ single }) });
-  mockAdminFrom.mockReturnValue({ select, eq, update, insert, in: inFn });
-  return { single, select, eq };
-}
-
-// Builds a chainable Supabase query mock for server client (async createClient)
-function buildServerChain(result: { data: unknown; error: unknown }) {
-  const single = vi.fn().mockResolvedValue(result);
-  const select = vi.fn().mockReturnValue({ single });
-  const eq = vi.fn().mockReturnValue({ single, select });
-  const update = vi
-    .fn()
-    .mockReturnValue({
-      eq: vi
-        .fn()
-        .mockReturnValue({ select: vi.fn().mockReturnValue({ single }) }),
-    });
-  mockServerFrom.mockReturnValue({ select, eq, update });
-  return { single, select, eq, update };
-}
-
 // ─── getBookingByToken ────────────────────────────────────────────────────────
 
 describe("getBookingByToken", () => {
