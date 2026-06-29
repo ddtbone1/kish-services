@@ -16,7 +16,7 @@ import type { Booking, BookingWithItems, PublicBooking } from "@/types";
  * Discriminates booking-creation failures so the API layer can choose an
  * HTTP status without parsing error strings.
  *   "conflict" → slot unavailable / double-booking race  → 409
- *   "invalid"  → services/add-ons invalid or inactive     → 422
+ *   "invalid"  → services invalid or inactive             → 422
  *   "error"    → unexpected database/server failure        → 500
  */
 export type BookingErrorCode = "conflict" | "invalid" | "error";
@@ -33,9 +33,9 @@ function mapBookingError(pgCode: string | undefined): BookingErrorCode {
  * Creates a booking atomically via the create_booking() Postgres function.
  *
  * The function validates the slot (exists, not blocked, in the future, not
- * already reserved) and all services/add-ons, then inserts the booking,
- * booking_items, and booking_add_ons in a single transaction — rolling back
- * everything on any failure. Concurrent bookings for the same slot are
+ * already reserved) and all services, then inserts the booking and
+ * booking_items in a single transaction — rolling back everything on any
+ * failure. Concurrent bookings for the same slot are
  * serialized (row lock) and backstopped by a partial unique index, so only
  * one can win; the rest surface as "conflict".
  *
@@ -57,7 +57,7 @@ export async function createBooking(input: CreateBookingInput): Promise<{
   const { data, error } = await supabase.rpc("create_booking", {
     p_slot_id: input.slot_id,
     p_service_ids: input.service_ids,
-    p_add_on_ids: input.add_on_ids ?? [],
+    p_add_on_ids: [],
     p_customer_name: input.customer_name,
     p_customer_email: input.customer_email,
     p_customer_phone: input.customer_phone ?? null,
@@ -83,7 +83,7 @@ export async function createBooking(input: CreateBookingInput): Promise<{
 }
 
 /**
- * Fetches a booking by its reference token, including all service packages and add-ons.
+ * Fetches a booking by its reference token, including all service packages.
  * Excludes owner_notes — safe for public-facing use.
  *
  * @param token - The booking reference token from the customer email link
@@ -104,8 +104,7 @@ export async function getBookingByToken(
       `id, reference_token, slot_id, customer_name, customer_email,
        customer_phone, address_line1, address_line2, city, notes,
        status, completed_at, cancelled_at, declined_at, created_at, updated_at,
-       booking_items ( id, service_id, price_at_booking, service:services ( id, name, duration_minutes ) ),
-       booking_add_ons ( id, add_on_id, price_at_booking, add_on:add_ons ( id, name ) )`,
+       booking_items ( id, service_id, price_at_booking, service:services ( id, name, duration_minutes ) )`,
     )
     .eq("reference_token", token)
     .single();

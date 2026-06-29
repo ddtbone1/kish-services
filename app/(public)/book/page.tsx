@@ -1,6 +1,6 @@
 import { BookingForm } from "@/components/booking/BookingForm";
 import { createClient } from "@/lib/supabase/server";
-import type { AddOn, Service } from "@/types";
+import type { Service } from "@/types";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -8,27 +8,14 @@ export const metadata: Metadata = {
   description: "Schedule your auto detailing service online.",
 };
 
-async function getServicesAndAddOns(): Promise<{
-  services: Service[];
-  addOns: AddOn[];
-}> {
+async function getServices(): Promise<Service[]> {
   const supabase = await createClient();
-  const [servicesResult, addOnsResult] = await Promise.all([
-    supabase
-      .from("services")
-      .select("*")
-      .eq("is_active", true)
-      .order("name", { ascending: true }),
-    supabase
-      .from("add_ons")
-      .select("*")
-      .eq("is_active", true)
-      .order("name", { ascending: true }),
-  ]);
-  return {
-    services: (servicesResult.data as Service[]) ?? [],
-    addOns: (addOnsResult.data as AddOn[]) ?? [],
-  };
+  const { data } = await supabase
+    .from("services")
+    .select("*")
+    .eq("is_active", true)
+    .order("name", { ascending: true });
+  return (data as Service[]) ?? [];
 }
 
 export default async function BookPage({
@@ -36,8 +23,10 @@ export default async function BookPage({
 }: {
   searchParams: Promise<{ service?: string }>;
 }) {
-  const [{ services, addOns }, { service: preselectedServiceId }] =
-    await Promise.all([getServicesAndAddOns(), searchParams]);
+  const [services, { service: preselectedServiceId }] = await Promise.all([
+    getServices(),
+    searchParams,
+  ]);
 
   return (
     <main className="flex flex-col items-center px-4 pt-24 md:pt-28 py-8 md:py-16">
@@ -47,7 +36,6 @@ export default async function BookPage({
         </h1>
         <BookingForm
           services={services}
-          addOns={addOns}
           preselectedServiceId={preselectedServiceId}
         />
       </div>

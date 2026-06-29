@@ -10,8 +10,13 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
 }));
 
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: vi.fn(),
+}));
+
 // Import after mock is declared
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 import {
   createTemplate,
@@ -22,7 +27,9 @@ import {
 } from "./availability.service";
 
 const mockCreateClient = vi.mocked(createClient);
+const mockCreateAdminClient = vi.mocked(createAdminClient);
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
+type AdminSupabaseClient = ReturnType<typeof createAdminClient>;
 
 // ─── getAvailableSlots ────────────────────────────────────────────────────────
 
@@ -41,9 +48,9 @@ describe("getAvailableSlots", () => {
     ];
 
     const rpcMock = vi.fn().mockResolvedValue({ data: fakeSlots, error: null });
-    mockCreateClient.mockResolvedValue({
+    mockCreateAdminClient.mockReturnValue({
       rpc: rpcMock,
-    } as unknown as SupabaseClient);
+    } as unknown as AdminSupabaseClient);
 
     const result = await getAvailableSlots("2026-06-01");
 
@@ -58,9 +65,9 @@ describe("getAvailableSlots", () => {
     const rpcMock = vi
       .fn()
       .mockResolvedValue({ data: null, error: { message: "DB error" } });
-    mockCreateClient.mockResolvedValue({
+    mockCreateAdminClient.mockReturnValue({
       rpc: rpcMock,
-    } as unknown as SupabaseClient);
+    } as unknown as AdminSupabaseClient);
 
     const result = await getAvailableSlots("2026-06-01");
 
@@ -70,9 +77,9 @@ describe("getAvailableSlots", () => {
 
   it("returns empty array when no slots are available for a date", async () => {
     const rpcMock = vi.fn().mockResolvedValue({ data: [], error: null });
-    mockCreateClient.mockResolvedValue({
+    mockCreateAdminClient.mockReturnValue({
       rpc: rpcMock,
-    } as unknown as SupabaseClient);
+    } as unknown as AdminSupabaseClient);
 
     const result = await getAvailableSlots("2026-06-01");
 

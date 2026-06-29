@@ -7,7 +7,7 @@
 --   1. admin_booking_alert to email_notifications.type check
 --   2. generate_slots_from_templates(p_from, p_to) SQL function
 --   3. Default weekly templates (Mon–Sat, 08:00–17:00, 60-min slots)
---   4. Seeds availability slots for the next 28 days
+--   4. Seeds availability slots for the next 90 days
 -- ============================================================
 
 -- ─── 1. Extend email_notifications type check ─────────────────────────────────
@@ -106,6 +106,6 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.availability_templates TO service
 GRANT INSERT, UPDATE, DELETE           ON public.availability_slots     TO authenticated;
 GRANT INSERT, UPDATE, DELETE           ON public.availability_slots     TO service_role;
 
--- ─── 6. Seed slots for the next 28 days (development / staging) ──────────────
+-- ─── 6. Seed slots for the next 90 days (development / staging) ──────────────
 -- This makes the booking form immediately usable after running migrations.
-SELECT generate_slots_from_templates(CURRENT_DATE, CURRENT_DATE + 27);
+SELECT generate_slots_from_templates(CURRENT_DATE, CURRENT_DATE + 89);

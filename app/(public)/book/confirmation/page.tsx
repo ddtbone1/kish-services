@@ -56,8 +56,7 @@ export default async function ConfirmationPage({
   const slot = booking ? await getSlot(booking.slot_id) : null;
 
   const total = booking
-    ? booking.booking_items.reduce((sum, i) => sum + i.price_at_booking, 0) +
-      booking.booking_add_ons.reduce((sum, a) => sum + a.price_at_booking, 0)
+    ? booking.booking_items.reduce((sum, i) => sum + i.price_at_booking, 0)
     : 0;
 
   return (
@@ -110,7 +109,7 @@ export default async function ConfirmationPage({
           <div className="bg-card rounded-3xl p-6 shadow-[var(--shadow-card)]">
             <h2 className="font-semibold text-base mb-4">Booking Summary</h2>
             <div className="flex flex-col gap-3">
-              {/* Services & add-ons */}
+              {/* Services */}
               {booking.booking_items.length > 0 && (
                 <div className="flex flex-col gap-1.5">
                   {booking.booking_items.map((item) => (
@@ -118,17 +117,6 @@ export default async function ConfirmationPage({
                       <span>{item.service?.name ?? "Service"}</span>
                       <span className="font-medium">
                         ₱{item.price_at_booking.toFixed(2)}
-                      </span>
-                    </div>
-                  ))}
-                  {booking.booking_add_ons.map((addon) => (
-                    <div
-                      key={addon.id}
-                      className="flex justify-between text-sm"
-                    >
-                      <span>{addon.add_on?.name ?? "Add-on"}</span>
-                      <span className="font-medium">
-                        ₱{addon.price_at_booking.toFixed(2)}
                       </span>
                     </div>
                   ))}

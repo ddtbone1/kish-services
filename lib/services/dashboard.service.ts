@@ -3,6 +3,7 @@
 // Updated: 2026-06-25 — replaced 8 parallel COUNT queries with single rpc() call
 
 import { BOOKING_STATUS, type BookingStatus } from "@/lib/constants/booking";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { manilaDayRangeUtc, manilaTodayDate } from "@/lib/utils/timezone";
 import type { BookingListItem } from "@/types";
@@ -38,6 +39,11 @@ const ACTIVE_STATUSES: BookingStatus[] = [
  * SQL function that returns all per-status counts and completedToday in a
  * single table scan with conditional aggregation.
  *
+ * Uses the service-role admin client (not the cookie-bound server client) so it
+ * can run inside unstable_cache() — accessing cookies() within a cache scope is
+ * unsupported. Safe because the dashboard layout already enforces auth and these
+ * counts are global (not user-scoped).
+ *
  * @returns { data: DashboardMetrics | null, error: string | null }
  * @since 2026-06-25
  */
@@ -45,7 +51,7 @@ export async function getDashboardMetrics(): Promise<{
   data: DashboardMetrics | null;
   error: string | null;
 }> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const today = manilaTodayDate();
   const { startUtcISO, endUtcISO } = manilaDayRangeUtc(today);
 

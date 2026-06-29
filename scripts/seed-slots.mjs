@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // scripts/seed-slots.mjs
 //
-// Populates availability_templates and generates slots for the next 28 days.
+// Populates availability_templates and generates slots for the next 90 days.
 // Runs directly against the remote Supabase using SUPABASE_SERVICE_ROLE_KEY.
 //
 // Usage:
@@ -97,7 +97,7 @@ const DEFAULT_TEMPLATES = [
   },
 ];
 
-const DAYS_AHEAD = 28;
+const DAYS_AHEAD = 90;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

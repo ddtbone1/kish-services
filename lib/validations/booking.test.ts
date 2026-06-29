@@ -111,15 +111,6 @@ describe("createBookingSchema", () => {
     }
   });
 
-  it("fails when add_on_ids contains duplicates", () => {
-    const dupe = "770e8400-e29b-41d4-a716-446655440000";
-    const result = createBookingSchema.safeParse({
-      ...VALID_INPUT,
-      add_on_ids: [dupe, dupe],
-    });
-    expect(result.success).toBe(false);
-  });
-
   it("fails when customer_email is invalid", () => {
     const result = createBookingSchema.safeParse({
       ...VALID_INPUT,
@@ -151,7 +142,6 @@ describe("createBookingSchema", () => {
     const result = createBookingSchema.safeParse(VALID_INPUT);
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.add_on_ids).toBeUndefined();
       expect(result.data.notes).toBeUndefined();
       expect(result.data.address_line2).toBeUndefined();
     }

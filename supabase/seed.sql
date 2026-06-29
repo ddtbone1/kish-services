@@ -1,6 +1,6 @@
 -- ============================================================
 -- Seed: Kish Home Services Detailing
--- Purpose: Seed services and add-ons for development/staging
+-- Purpose: Seed active services for development/staging
 -- Added:   2026-05-21
 -- ============================================================
 -- NOTE: Update prices to match your actual pricing before
@@ -40,30 +40,5 @@ INSERT INTO services (id, name, description, price, duration_minutes, is_active)
     'Eliminate bad odors and bacteria for a healthier car. Ozone or enzyme treatment to neutralise odors and sanitise surfaces.',
     800.00,
     60,
-    true
-  );
-
--- ─── Add-ons ──────────────────────────────────────────────────────────────────
-
-INSERT INTO add_ons (id, name, description, price, is_active) VALUES
-  (
-    gen_random_uuid(),
-    'Engine Bay Cleaning',
-    'Degrease and rinse the engine bay for a clean, detailed look under the hood.',
-    400.00,
-    true
-  ),
-  (
-    gen_random_uuid(),
-    'Tire Dressing',
-    'Rejuvenate and protect tires with a long-lasting dressing for a showroom-ready finish.',
-    250.00,
-    true
-  ),
-  (
-    gen_random_uuid(),
-    'Ceramic Coating (Basic)',
-    'Entry-level hydrophobic ceramic coating for paint protection and enhanced gloss.',
-    2000.00,
     true
   );

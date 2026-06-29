@@ -30,11 +30,6 @@ Services and prices (PHP ₱):
 - Buffing: ₱1,500, ~120 minutes
 - Back to Zero Odor / Disinfection: ₱800, ~60 minutes
 
-Add-ons:
-- Engine Bay Cleaning: ₱400
-- Tire Dressing: ₱250
-- Ceramic Coating (Basic): ₱2,000
-
 Booking: Customers can book online at the website by choosing a service, selecting a date/time, and providing their address. After booking they receive a confirmation email with a tracking link to monitor their booking status.
 
 Instructions:
@@ -86,6 +81,9 @@ async function getOrRefreshFaqCache(
   // is stored server-side. Cached tokens are billed at ~1/4 the normal rate.
   let geminiCacheName: string | null = null;
   try {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY is not configured");
+    }
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
     // @ts-expect-error: cacheManager exists in SDK 0.24.1 but is missing from current types.
     if (typeof genAI.cacheManager?.create === "function") {
@@ -123,6 +121,20 @@ export async function answerQuestion(input: ChatQuestionInput): Promise<{
   data: { answer: string; was_escalated: boolean } | null;
   error: string | null;
 }> {
+  if (!process.env.GEMINI_API_KEY) {
+    logger.error("answerQuestion failed", {
+      error: "GEMINI_API_KEY is not configured",
+    });
+    return {
+      data: {
+        answer:
+          "The AI chat assistant is not configured yet. For help with booking, services, pricing, or scheduling, please contact Kish Auto Detailing Services at 0985 204 9882 or kishdetailing@gmail.com.",
+        was_escalated: true,
+      },
+      error: null,
+    };
+  }
+
   // Fetch active FAQs — result is cached in memory after the first call.
   const supabase = await createClient();
   const { data: faqs } = await supabase

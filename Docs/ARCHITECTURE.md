@@ -65,7 +65,7 @@ kish/
 │   │   ├── bookings/[token]/route.ts         # GET / PATCH (cancel by token)
 │   │   ├── chat/route.ts                     # POST — chatbot question (rate-limited)
 │   │   ├── dashboard/bookings/[id]/route.ts  # PATCH — status + notes (auth)
-│   │   └── services/route.ts                 # GET — active services + add-ons list
+│   │   └── services/route.ts                 # GET — active services list
 │   ├── login/page.tsx                        # Owner login page
 │   └── layout.tsx                            # Root layout (fonts, metadata)
 ├── components/
@@ -119,7 +119,7 @@ kish/
 ├── next.config.ts                            # Security headers (CSP, X-Frame-Options, etc.)
 ├── supabase/
 │   ├── migrations/                           # SQL migration files (run in order)
-│   └── seed.sql                              # Seeds services and add-ons
+│   └── seed.sql                              # Seeds active services
 ├── .github/instructions/                     # Copilot agent instruction files
 └── Docs/                                     # Architecture and planning documentation
 ```
@@ -254,6 +254,10 @@ kish/
 
 ### `add_ons`
 
+Historical compatibility table. Add-ons are no longer offered in the
+customer-facing booking flow; migration `20260629000000_service_catalog_and_future_slots.sql`
+deactivates existing rows.
+
 | Column        | Type          | Nullable | Default             | Notes                   |
 | ------------- | ------------- | -------- | ------------------- | ----------------------- |
 | `id`          | uuid          | NO       | `gen_random_uuid()` | PK                      |
@@ -285,7 +289,8 @@ One row per service package selected in a booking. Price is snapshotted at booki
 
 ### `booking_add_ons`
 
-One row per add-on selected in a booking. Price is snapshotted at booking time.
+Historical compatibility table for bookings created before add-ons were removed.
+New customer-facing bookings no longer create rows here.
 
 | Column             | Type          | Nullable | Default             | Notes                                       |
 | ------------------ | ------------- | -------- | ------------------- | ------------------------------------------- |
@@ -349,7 +354,7 @@ Error:   { error: string, details?: ZodError | string }
 
 | Method  | Path                                | Body / Params          | Description                                          |
 | ------- | ----------------------------------- | ---------------------- | ---------------------------------------------------- |
-| `GET`   | `/api/services`                     | —                      | List active services and add-ons                     |
+| `GET`   | `/api/services`                     | —                      | List active services                                 |
 | `GET`   | `/api/availability?date=YYYY-MM-DD` | query: `date`          | Available (unblocked) slots for a single date        |
 | `POST`  | `/api/bookings`                     | `createBookingSchema`  | Create a new booking — rate-limited 5/hr per IP      |
 | `GET`   | `/api/bookings/[token]`             | —                      | Get booking by reference token                       |

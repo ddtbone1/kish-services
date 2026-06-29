@@ -87,15 +87,10 @@ export default async function BookingStatusPage({
 
   const activeIndex = TIMELINE_STEPS.indexOf(booking.status);
 
-  const total =
-    booking.booking_items.reduce(
-      (sum, item) => sum + item.price_at_booking,
-      0,
-    ) +
-    booking.booking_add_ons.reduce(
-      (sum, addon) => sum + addon.price_at_booking,
-      0,
-    );
+  const total = booking.booking_items.reduce(
+    (sum, item) => sum + item.price_at_booking,
+    0,
+  );
 
   const mapsLink = `https://maps.google.com/?q=${encodeURIComponent(
     `${booking.address_line1}, ${booking.city}`,
@@ -197,7 +192,7 @@ export default async function BookingStatusPage({
         <div className="bg-card rounded-3xl p-6 shadow-[var(--shadow-card)]">
           <h2 className="font-semibold text-base mb-4">Booking Details</h2>
           <div className="flex flex-col gap-3">
-            {/* Services & add-ons */}
+            {/* Services */}
             {booking.booking_items.length > 0 && (
               <div className="flex flex-col gap-1.5">
                 {booking.booking_items.map((item) => (
@@ -205,14 +200,6 @@ export default async function BookingStatusPage({
                     <span>{item.service?.name ?? "Service"}</span>
                     <span className="font-medium">
                       ₱{item.price_at_booking.toFixed(2)}
-                    </span>
-                  </div>
-                ))}
-                {booking.booking_add_ons.map((addon) => (
-                  <div key={addon.id} className="flex justify-between text-sm">
-                    <span>{addon.add_on?.name ?? "Add-on"}</span>
-                    <span className="font-medium">
-                      ₱{addon.price_at_booking.toFixed(2)}
                     </span>
                   </div>
                 ))}

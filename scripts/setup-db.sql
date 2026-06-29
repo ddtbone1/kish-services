@@ -8,7 +8,7 @@
 --   2. Creates the generate_slots_from_templates() SQL function
 --   3. Extends email_notifications.type to include admin_booking_alert
 --   4. Inserts default Mon–Sat templates (skips if already exist)
---   5. Generates slots for the next 28 days
+--   5. Generates slots for the next 90 days
 --   6. Fixes broken/missing anon RLS policies on bookings, booking_items,
 --      booking_add_ons (INSERT policies, correct SELECT, cancellation UPDATE)
 -- ============================================================
@@ -123,8 +123,8 @@ WHERE NOT EXISTS (
   WHERE t.day_of_week = v.day_of_week
 );
 
--- ─── 5. Generate slots for the next 28 days ───────────────────────────────────
-SELECT generate_slots_from_templates(CURRENT_DATE, CURRENT_DATE + 27);
+-- ─── 5. Generate slots for the next 90 days ───────────────────────────────────
+SELECT generate_slots_from_templates(CURRENT_DATE, CURRENT_DATE + 89);
 
 -- ─── 6. Remove anon RLS policies on bookings ────────────────────────────────
 -- All public booking operations use createAdminClient() (service_role) which

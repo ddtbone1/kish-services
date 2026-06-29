@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
 
       if (error || !data) {
         // 409 when the chosen slot is no longer available (taken/blocked/past),
-        // 422 when the selected services/add-ons are invalid, else 500.
+        // 422 when the selected services are invalid, else 500.
         const status =
           code === "conflict" ? 409 : code === "invalid" ? 422 : 500;
         return NextResponse.json(

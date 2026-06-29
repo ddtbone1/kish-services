@@ -4,6 +4,7 @@ import {
   type EmailNotificationType,
 } from "@/lib/constants/booking";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getAppUrl } from "@/lib/utils/app-url";
 import { logger } from "@/lib/logger";
 import type { Booking } from "@/types";
 import nodemailer, { type SendMailOptions } from "nodemailer";
@@ -109,7 +110,7 @@ export async function sendAdminNotification(
   }
 
   const admin = createAdminClient();
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const appUrl = getAppUrl();
   const dashboardLink = `${appUrl}/dashboard/bookings/${booking.id}`;
 
   const subject = `New Booking – ${booking.customer_name}`;
@@ -187,7 +188,7 @@ function getSubjectForType(type: EmailNotificationType): string {
 }
 
 function getBodyForType(booking: Booking, type: EmailNotificationType): string {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const appUrl = getAppUrl();
   const bookingLink = `${appUrl}/booking/${booking.reference_token}`;
 
   switch (type) {

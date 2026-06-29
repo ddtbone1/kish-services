@@ -164,7 +164,7 @@ describe("POST /api/bookings", () => {
     expect(mockSendBookingEmail).not.toHaveBeenCalled();
   });
 
-  it("returns 422 when services/add-ons are invalid", async () => {
+  it("returns 422 when services are invalid", async () => {
     mockCreateBooking.mockResolvedValue({
       data: null,
       error: "One or more selected services are unavailable",

@@ -114,7 +114,6 @@ describe("createBooking", () => {
   const INPUT = {
     slot_id: "550e8400-e29b-41d4-a716-446655440000",
     service_ids: ["660e8400-e29b-41d4-a716-446655440000"],
-    add_on_ids: ["770e8400-e29b-41d4-a716-446655440000"],
     customer_name: "Karl Marty",
     customer_email: "karl@example.com",
     customer_phone: undefined,
@@ -145,7 +144,7 @@ describe("createBooking", () => {
     expect(mockAdminRpc).toHaveBeenCalledWith("create_booking", {
       p_slot_id: INPUT.slot_id,
       p_service_ids: INPUT.service_ids,
-      p_add_on_ids: INPUT.add_on_ids,
+      p_add_on_ids: [],
       p_customer_name: INPUT.customer_name,
       p_customer_email: INPUT.customer_email,
       p_customer_phone: null,
@@ -156,12 +155,10 @@ describe("createBooking", () => {
     });
   });
 
-  it("defaults add_on_ids to an empty array when omitted", async () => {
+  it("always sends an empty add-on array to the legacy RPC parameter", async () => {
     mockAdminRpc.mockResolvedValue({ data: makePublicBooking(), error: null });
 
-    const { add_on_ids: _omit, ...noAddOns } = INPUT;
-    void _omit;
-    await createBooking(noAddOns);
+    await createBooking(INPUT);
 
     expect(mockAdminRpc.mock.calls[0][1].p_add_on_ids).toEqual([]);
   });
@@ -190,7 +187,7 @@ describe("createBooking", () => {
     expect(result.code).toBe("conflict");
   });
 
-  it("maps PT422 (invalid services/add-ons) to invalid", async () => {
+  it("maps PT422 (invalid services) to invalid", async () => {
     mockAdminRpc.mockResolvedValue({
       data: null,
       error: { code: "PT422", message: "One or more selected services are unavailable" },

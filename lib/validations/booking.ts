@@ -11,11 +11,6 @@ export const createBookingSchema = z.object({
     .array(z.string().uuid())
     .min(1, "Select at least one service")
     .refine(isUnique, "Duplicate services are not allowed"),
-  // Optional add-ons selected on top of base packages (no duplicates).
-  add_on_ids: z
-    .array(z.string().uuid())
-    .refine(isUnique, "Duplicate add-ons are not allowed")
-    .optional(),
   customer_name: z.string().min(2).max(100),
   customer_email: z.string().email(),
   customer_phone: z.string().min(7).max(20).optional(),

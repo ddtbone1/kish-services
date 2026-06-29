@@ -69,37 +69,14 @@ export interface BookingItem {
   service?: Service;
 }
 
-/** An optional add-on that can be selected on top of base packages */
-export interface AddOn {
-  id: string;
-  name: string;
-  description: string | null;
-  price: number;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-/** An add-on line item within a booking — price is snapshotted at booking time */
-export interface BookingAddOn {
-  id: string;
-  booking_id: string;
-  add_on_id: string;
-  price_at_booking: number;
-  // Joined field when fetched with add-on data
-  add_on?: AddOn;
-}
-
-/** Full booking with all line items — used in dashboard detail view */
+/** Full booking with service line items — used in public booking views */
 export interface BookingWithItems extends PublicBooking {
   booking_items: BookingItem[];
-  booking_add_ons: BookingAddOn[];
 }
 
 /** Full booking including owner_notes and joined slot — owner dashboard only */
 export interface OwnerBookingDetail extends Booking {
   booking_items: BookingItem[];
-  booking_add_ons: BookingAddOn[];
   slot: Pick<
     AvailabilitySlot,
     "id" | "date" | "start_time" | "end_time"

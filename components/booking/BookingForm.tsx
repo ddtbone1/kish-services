@@ -7,7 +7,7 @@
 import { BookingDatePicker } from "@/components/booking/BookingDatePicker";
 import { cn } from "@/lib/utils";
 import { formatTime } from "@/lib/utils/datetime";
-import type { AddOn, AvailabilitySlot, Service } from "@/types";
+import type { AvailabilitySlot, Service } from "@/types";
 import { format } from "date-fns";
 import { Check } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -15,7 +15,6 @@ import { useEffect, useState } from "react";
 
 interface BookingFormProps {
   services: Service[];
-  addOns: AddOn[];
   preselectedServiceId?: string;
 }
 
@@ -29,7 +28,6 @@ const PROGRESS_LABELS = ["Service", "Date & Time", "Your Details"];
 
 export function BookingForm({
   services,
-  addOns,
   preselectedServiceId,
 }: BookingFormProps) {
   const router = useRouter();
@@ -45,7 +43,6 @@ export function BookingForm({
     }
     return [];
   });
-  const [selectedAddOnIds, setSelectedAddOnIds] = useState<string[]>([]);
 
   // Default to today in YYYY-MM-DD format (local time)
   const [selectedDate, setSelectedDate] = useState<string>(
@@ -54,6 +51,7 @@ export function BookingForm({
   const [selectedSlotId, setSelectedSlotId] = useState<string>("");
   const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
+  const [slotsError, setSlotsError] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     customer_name: "",
@@ -73,14 +71,28 @@ export function BookingForm({
 
     const timer = window.setTimeout(() => {
       setSlotsLoading(true);
+      setSlotsError(null);
       setSelectedSlotId("");
       fetch(`/api/availability?date=${selectedDate}`)
-        .then((r) => r.json())
+        .then(async (r) => {
+          const json = await r.json();
+          if (!r.ok) {
+            throw new Error(json.error ?? "Failed to load availability.");
+          }
+          return json;
+        })
         .then((json) => {
           if (!cancelled) setSlots(json.data ?? []);
         })
-        .catch(() => {
-          if (!cancelled) setSlots([]);
+        .catch((err) => {
+          if (!cancelled) {
+            setSlots([]);
+            setSlotsError(
+              err instanceof Error
+                ? err.message
+                : "Failed to load availability.",
+            );
+          }
         })
         .finally(() => {
           if (!cancelled) setSlotsLoading(false);
@@ -99,12 +111,6 @@ export function BookingForm({
     );
   }
 
-  function toggleAddOn(id: string) {
-    setSelectedAddOnIds((prev) =>
-      prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id],
-    );
-  }
-
   function setField(key: keyof typeof form, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
@@ -120,10 +126,7 @@ export function BookingForm({
   const selectedServices = services.filter((s) =>
     selectedServiceIds.includes(s.id),
   );
-  const selectedAddOns = addOns.filter((a) => selectedAddOnIds.includes(a.id));
-  const total =
-    selectedServices.reduce((sum, s) => sum + s.price, 0) +
-    selectedAddOns.reduce((sum, a) => sum + a.price, 0);
+  const total = selectedServices.reduce((sum, s) => sum + s.price, 0);
   const selectedSlot = slots.find((sl) => sl.id === selectedSlotId);
 
   async function handleSubmit() {
@@ -136,7 +139,6 @@ export function BookingForm({
         body: JSON.stringify({
           slot_id: selectedSlotId,
           service_ids: selectedServiceIds,
-          ...(selectedAddOnIds.length > 0 && { add_on_ids: selectedAddOnIds }),
           customer_name: form.customer_name,
           customer_email: form.customer_email,
           ...(form.customer_phone && { customer_phone: form.customer_phone }),
@@ -258,39 +260,6 @@ export function BookingForm({
             })}
           </div>
 
-          {/* Add-ons */}
-          {addOns.length > 0 && (
-            <div>
-              <h3 className="text-sm font-semibold mb-2">
-                Add-ons{" "}
-                <span className="text-muted-foreground font-normal">
-                  (optional)
-                </span>
-              </h3>
-              <div className="flex flex-wrap gap-2">
-                {addOns.map((addon) => {
-                  const isSelected = selectedAddOnIds.includes(addon.id);
-                  return (
-                    <button
-                      key={addon.id}
-                      type="button"
-                      onClick={() => toggleAddOn(addon.id)}
-                      className={cn(
-                        "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium border transition-all",
-                        isSelected
-                          ? "bg-primary text-primary-foreground border-primary"
-                          : "bg-card border-border hover:bg-muted",
-                      )}
-                    >
-                      {isSelected && <Check className="size-3" />}
-                      {addon.name} · ₱{addon.price.toFixed(2)}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
           <button
             type="button"
             disabled={!canProceedStep1}
@@ -344,6 +313,10 @@ export function BookingForm({
                   />
                 ))}
               </div>
+            ) : slotsError ? (
+              <p className="text-sm text-destructive bg-destructive/10 rounded-2xl px-4 py-3">
+                {slotsError}
+              </p>
             ) : slots.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 No available slots for this date. Please choose another day.
@@ -563,17 +536,6 @@ export function BookingForm({
                         <span className="text-foreground/80">{s.name}</span>
                         <span className="font-medium shrink-0">
                           ₱{s.price.toFixed(2)}
-                        </span>
-                      </div>
-                    ))}
-                    {selectedAddOns.map((a) => (
-                      <div
-                        key={a.id}
-                        className="flex justify-between gap-2 text-xs"
-                      >
-                        <span className="text-foreground/80">{a.name}</span>
-                        <span className="font-medium shrink-0">
-                          ₱{a.price.toFixed(2)}
                         </span>
                       </div>
                     ))}

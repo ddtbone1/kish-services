@@ -17,6 +17,15 @@ vi.mock("@/lib/supabase/server", () => ({
   })),
 }));
 
+// getDashboardMetrics uses the service-role admin client so it can run inside
+// unstable_cache(); getBookings still uses the cookie-bound server client above.
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: vi.fn(() => ({
+    from: mockServerFrom,
+    rpc: mockServerRpc,
+  })),
+}));
+
 import { getBookings, getDashboardMetrics } from "./dashboard.service";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

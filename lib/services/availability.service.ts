@@ -3,6 +3,7 @@
 // Added: 2026-05-21
 
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type {
   CreateSlotInput,
   CreateTemplateInput,
@@ -39,7 +40,7 @@ export async function getSlotsByDateRange(
 export async function getAvailableSlots(
   date: string,
 ): Promise<{ data: AvailabilitySlot[] | null; error: string | null }> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data, error } = await supabase.rpc("get_available_slots", {
     p_date: date,

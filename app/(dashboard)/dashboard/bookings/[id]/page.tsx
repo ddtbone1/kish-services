@@ -40,7 +40,6 @@ export default async function BookingDetailPage({
        address_line1, address_line2, city, notes, owner_notes, status,
        completed_at, cancelled_at, declined_at, created_at, updated_at, slot_id,
        booking_items(id, price_at_booking, service:services(id, name, duration_minutes)),
-       booking_add_ons(id, price_at_booking, add_on:add_ons(id, name)),
        slot:availability_slots!slot_id(id, date, start_time, end_time)`,
     )
     .eq("id", id)
@@ -59,9 +58,10 @@ export default async function BookingDetailPage({
     customer_phone: string | null;
   };
 
-  const total =
-    booking.booking_items.reduce((sum, i) => sum + i.price_at_booking, 0) +
-    booking.booking_add_ons.reduce((sum, a) => sum + a.price_at_booking, 0);
+  const total = booking.booking_items.reduce(
+    (sum, i) => sum + i.price_at_booking,
+    0,
+  );
 
   const mapsLink = `https://maps.google.com/?q=${encodeURIComponent(
     `${booking.address_line1}, ${booking.city}`,
@@ -116,14 +116,6 @@ export default async function BookingDetailPage({
               <span>{item.service?.name ?? "Service"}</span>
               <span className="font-medium">
                 ₱{item.price_at_booking.toFixed(2)}
-              </span>
-            </div>
-          ))}
-          {booking.booking_add_ons.map((addon) => (
-            <div key={addon.id} className="flex justify-between text-sm">
-              <span>{addon.add_on?.name ?? "Add-on"}</span>
-              <span className="font-medium">
-                ₱{addon.price_at_booking.toFixed(2)}
               </span>
             </div>
           ))}
