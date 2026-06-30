@@ -31,6 +31,108 @@ const ACTIVE_STATUSES: BookingStatus[] = [
   BOOKING_STATUS.ON_THE_WAY,
 ];
 
+const COUNTED_STATUSES: BookingStatus[] = [
+  BOOKING_STATUS.PENDING,
+  BOOKING_STATUS.CONFIRMED,
+  BOOKING_STATUS.ON_THE_WAY,
+  BOOKING_STATUS.COMPLETED,
+  BOOKING_STATUS.CANCELLED,
+  BOOKING_STATUS.DECLINED,
+];
+
+const ZERO_COUNTS: StatusCounts = {
+  [BOOKING_STATUS.PENDING]: 0,
+  [BOOKING_STATUS.CONFIRMED]: 0,
+  [BOOKING_STATUS.ON_THE_WAY]: 0,
+  [BOOKING_STATUS.COMPLETED]: 0,
+  [BOOKING_STATUS.CANCELLED]: 0,
+  [BOOKING_STATUS.DECLINED]: 0,
+};
+
+function toCount(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function metricsFromCounts(
+  counts: StatusCounts,
+  completedToday: number,
+  upcoming: number,
+): DashboardMetrics {
+  return {
+    counts,
+    total: Object.values(counts).reduce((sum, count) => sum + count, 0),
+    completedToday,
+    upcoming,
+  };
+}
+
+function countsFromRpcRow(row: Record<string, unknown>): StatusCounts {
+  return {
+    [BOOKING_STATUS.PENDING]: toCount(row.pending),
+    [BOOKING_STATUS.CONFIRMED]: toCount(row.confirmed),
+    [BOOKING_STATUS.ON_THE_WAY]: toCount(row.on_the_way),
+    [BOOKING_STATUS.COMPLETED]: toCount(row.completed),
+    [BOOKING_STATUS.CANCELLED]: toCount(row.cancelled),
+    [BOOKING_STATUS.DECLINED]: toCount(row.declined),
+  };
+}
+
+async function getFallbackBookingCounts(
+  supabase: ReturnType<typeof createAdminClient>,
+  startUtcISO: string,
+  endUtcISO: string,
+): Promise<{
+  counts: StatusCounts | null;
+  completedToday: number;
+  error: string | null;
+}> {
+  const [statusResults, completedTodayRes] = await Promise.all([
+    Promise.all(
+      COUNTED_STATUSES.map((status) =>
+        supabase
+          .from("bookings")
+          .select("id", { count: "exact", head: true })
+          .eq("status", status),
+      ),
+    ),
+    supabase
+      .from("bookings")
+      .select("id", { count: "exact", head: true })
+      .eq("status", BOOKING_STATUS.COMPLETED)
+      .gte("completed_at", startUtcISO)
+      .lt("completed_at", endUtcISO),
+  ]);
+
+  const failedStatus = statusResults.find((result) => result.error);
+  if (failedStatus?.error) {
+    return {
+      counts: null,
+      completedToday: 0,
+      error: failedStatus.error.message,
+    };
+  }
+
+  if (completedTodayRes.error) {
+    return {
+      counts: null,
+      completedToday: 0,
+      error: completedTodayRes.error.message,
+    };
+  }
+
+  const counts: StatusCounts = { ...ZERO_COUNTS };
+  COUNTED_STATUSES.forEach((status, index) => {
+    counts[status] = statusResults[index].count ?? 0;
+  });
+
+  return {
+    counts,
+    completedToday: completedTodayRes.count ?? 0,
+    error: null,
+  };
+}
+
 /**
  * Computes all dashboard metrics using 2 database calls.
  *
@@ -70,11 +172,28 @@ export async function getDashboardMetrics(): Promise<{
       .gte("availability_slots.date", today),
   ]);
 
-  if (countsRes.error) {
-    return { data: null, error: countsRes.error.message };
-  }
   if (upcomingRes.error) {
     return { data: null, error: upcomingRes.error.message };
+  }
+
+  if (countsRes.error) {
+    const fallback = await getFallbackBookingCounts(
+      supabase,
+      startUtcISO,
+      endUtcISO,
+    );
+    if (fallback.error || !fallback.counts) {
+      return { data: null, error: fallback.error ?? countsRes.error.message };
+    }
+
+    return {
+      data: metricsFromCounts(
+        fallback.counts,
+        fallback.completedToday,
+        upcomingRes.count ?? 0,
+      ),
+      error: null,
+    };
   }
 
   // RETURNS TABLE gives an array; the aggregation always yields exactly one row.
@@ -84,22 +203,12 @@ export async function getDashboardMetrics(): Promise<{
     return { data: null, error: "get_booking_counts returned no rows" };
   }
 
-  const counts: StatusCounts = {
-    [BOOKING_STATUS.PENDING]:    Number(row.pending)    ?? 0,
-    [BOOKING_STATUS.CONFIRMED]:  Number(row.confirmed)  ?? 0,
-    [BOOKING_STATUS.ON_THE_WAY]: Number(row.on_the_way) ?? 0,
-    [BOOKING_STATUS.COMPLETED]:  Number(row.completed)  ?? 0,
-    [BOOKING_STATUS.CANCELLED]:  Number(row.cancelled)  ?? 0,
-    [BOOKING_STATUS.DECLINED]:   Number(row.declined)   ?? 0,
-  };
-
   return {
-    data: {
-      counts,
-      total:          Number(row.total)           ?? 0,
-      completedToday: Number(row.completed_today) ?? 0,
-      upcoming:       upcomingRes.count           ?? 0,
-    },
+    data: metricsFromCounts(
+      countsFromRpcRow(row),
+      toCount(row.completed_today),
+      upcomingRes.count ?? 0,
+    ),
     error: null,
   };
 }

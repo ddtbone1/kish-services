@@ -1,10 +1,11 @@
 import { BookingStatusActions } from "@/components/dashboard/BookingStatusActions";
 import { OwnerNotesForm } from "@/components/dashboard/OwnerNotesForm";
+import { ResendEmailButton } from "@/components/dashboard/ResendEmailButton";
 import { StatusBadge } from "@/components/shared/StatusBadge";
-import type { BookingStatus } from "@/lib/constants/booking";
+import { BOOKING_STATUS, type BookingStatus } from "@/lib/constants/booking";
 import { createClient } from "@/lib/supabase/server";
 import { formatTime } from "@/lib/utils/datetime";
-import type { OwnerBookingDetail } from "@/types";
+import type { BookingEvent, OwnerBookingDetail } from "@/types";
 import { ArrowLeft, Clock, ExternalLink, MapPin } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -25,6 +26,37 @@ function formatTs(ts: string | null): string | null {
   });
 }
 
+const VEHICLE_LABELS: Record<string, string> = {
+  sedan: "Sedan",
+  suv: "SUV",
+  pickup: "Pickup",
+  van: "Van",
+  motorcycle: "Motorcycle",
+  other: "Other",
+};
+
+/** Tri-state booleans: true → Yes, false → No, null → Not sure / unknown. */
+function triLabel(v: boolean | null): string {
+  if (v === true) return "Yes";
+  if (v === false) return "No";
+  return "Not sure";
+}
+
+function DetailRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex justify-between gap-4 text-sm">
+      <span className="text-muted-foreground shrink-0">{label}</span>
+      <span className="text-right">{children}</span>
+    </div>
+  );
+}
+
 export default async function BookingDetailPage({
   params,
 }: {
@@ -38,9 +70,17 @@ export default async function BookingDetailPage({
     .select(
       `id, reference_token, customer_name, customer_email, customer_phone,
        address_line1, address_line2, city, notes, owner_notes, status,
-       completed_at, cancelled_at, declined_at, created_at, updated_at, slot_id,
+       privacy_notice_version, terms_version, customer_consent_at,
+       transactional_contact_consent, environmental_ack_version,
+       environmental_ack_at, vehicle_type, vehicle_details,
+       parking_available, water_available, electric_available,
+       access_instructions, site_safety_notes,
+       completed_at, cancelled_at, cancellation_reason,
+       cancellation_policy_version, cancelled_by, declined_at, status_reason,
+       created_at, updated_at, slot_id,
        booking_items(id, price_at_booking, service:services(id, name, duration_minutes)),
-       slot:availability_slots!slot_id(id, date, start_time, end_time)`,
+       slot:availability_slots!slot_id(id, date, start_time, end_time),
+       booking_events(id, booking_id, event_type, actor_type, actor_id, source, payload, created_at)`,
     )
     .eq("id", id)
     .single();
@@ -73,6 +113,18 @@ export default async function BookingDetailPage({
     { label: "Cancelled", ts: booking.cancelled_at, always: false },
     { label: "Declined", ts: booking.declined_at, always: false },
   ].filter((e) => e.always || e.ts);
+  const bookingEvents = ((booking.booking_events ?? []) as BookingEvent[]).sort(
+    (a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  );
+  const riskEvents = bookingEvents.filter(
+    (event) => event.event_type === "risk_flagged",
+  );
+  const emailEvents = bookingEvents.filter(
+    (event) => event.event_type === "email_recorded",
+  );
+  // Every status except pending has a corresponding customer email to resend.
+  const canResend = booking.status !== BOOKING_STATUS.PENDING;
 
   return (
     <div className="flex flex-col gap-5 max-w-2xl">
@@ -177,6 +229,135 @@ export default async function BookingDetailPage({
         </a>
       </div>
 
+      {/* Consent & site readiness */}
+      <div className="bg-card rounded-3xl p-5 shadow-[var(--shadow-card)]">
+        <h2 className="font-semibold text-base mb-4">Consent &amp; Site</h2>
+        <div className="flex flex-col gap-2">
+          <DetailRow label="Consent">
+            {booking.customer_consent_at ? (
+              <span>
+                Accepted {formatTs(booking.customer_consent_at)}
+                {booking.terms_version && (
+                  <span className="text-muted-foreground">
+                    {" "}
+                    · Terms {booking.terms_version}
+                  </span>
+                )}
+                {booking.privacy_notice_version && (
+                  <span className="text-muted-foreground">
+                    {" "}
+                    · Privacy {booking.privacy_notice_version}
+                  </span>
+                )}
+              </span>
+            ) : (
+              <span className="text-muted-foreground">Not recorded</span>
+            )}
+          </DetailRow>
+          <DetailRow label="Transactional emails">
+            {booking.transactional_contact_consent ? "Consented" : "—"}
+          </DetailRow>
+          <DetailRow label="Environmental ack">
+            {booking.environmental_ack_at ? (
+              <span>
+                Accepted {formatTs(booking.environmental_ack_at)}
+                {booking.environmental_ack_version && (
+                  <span className="text-muted-foreground">
+                    {" "}
+                    · Env {booking.environmental_ack_version}
+                  </span>
+                )}
+              </span>
+            ) : (
+              <span className="text-muted-foreground">Not recorded</span>
+            )}
+          </DetailRow>
+          <DetailRow label="Vehicle">
+            {booking.vehicle_type
+              ? `${VEHICLE_LABELS[booking.vehicle_type] ?? booking.vehicle_type}${
+                  booking.vehicle_type === "other" && booking.vehicle_details
+                    ? ` — ${booking.vehicle_details}`
+                    : ""
+                }`
+              : "—"}
+          </DetailRow>
+          <DetailRow label="Parking / workspace">
+            {triLabel(booking.parking_available)}
+          </DetailRow>
+          <DetailRow label="Water on-site">
+            {triLabel(booking.water_available)}
+          </DetailRow>
+          <DetailRow label="Power on-site">
+            {triLabel(booking.electric_available)}
+          </DetailRow>
+          {booking.access_instructions && (
+            <DetailRow label="Access">{booking.access_instructions}</DetailRow>
+          )}
+          {booking.site_safety_notes && (
+            <DetailRow label="Safety notes">
+              {booking.site_safety_notes}
+            </DetailRow>
+          )}
+        </div>
+      </div>
+
+      {(booking.cancellation_reason || booking.status_reason) && (
+        <div className="bg-card rounded-3xl p-5 shadow-[var(--shadow-card)]">
+          <h2 className="font-semibold text-base mb-3">Status Context</h2>
+          <div className="flex flex-col gap-2">
+            {booking.cancelled_by && (
+              <DetailRow label="Cancelled by">{booking.cancelled_by}</DetailRow>
+            )}
+            {booking.cancellation_reason && (
+              <DetailRow label="Cancellation reason">
+                {booking.cancellation_reason}
+              </DetailRow>
+            )}
+            {booking.status_reason && (
+              <DetailRow label="Status reason">{booking.status_reason}</DetailRow>
+            )}
+          </div>
+        </div>
+      )}
+
+      {(riskEvents.length > 0 || emailEvents.length > 0 || canResend) && (
+        <div className="bg-card rounded-3xl p-5 shadow-[var(--shadow-card)]">
+          <h2 className="font-semibold text-base mb-3">Internal Signals</h2>
+          <div className="flex flex-col gap-3 text-sm">
+            {riskEvents.map((event) => {
+              const flags = Array.isArray(event.payload.flags)
+                ? event.payload.flags
+                : [];
+              return (
+                <div key={event.id}>
+                  <p className="font-medium">Risk flags</p>
+                  <p className="text-muted-foreground">
+                    {flags
+                      .map((flag) =>
+                        typeof flag === "object" &&
+                        flag !== null &&
+                        "code" in flag
+                          ? String(flag.code)
+                          : "flag",
+                      )
+                      .join(", ")}
+                  </p>
+                </div>
+              );
+            })}
+            {emailEvents.slice(0, 5).map((event) => (
+              <DetailRow
+                key={event.id}
+                label={String(event.payload.type ?? "Email")}
+              >
+                {String(event.payload.status ?? "recorded")}
+              </DetailRow>
+            ))}
+            {canResend && <ResendEmailButton bookingId={booking.id} />}
+          </div>
+        </div>
+      )}
+
       {/* Customer notes */}
       {booking.notes && (
         <div className="bg-card rounded-3xl p-5 shadow-[var(--shadow-card)]">
@@ -204,6 +385,23 @@ export default async function BookingDetailPage({
                 <span className="font-medium w-24">{label}</span>
                 <span className="text-muted-foreground">
                   {formatTs(ts as string)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {bookingEvents.length > 0 && (
+        <div className="bg-card rounded-3xl p-5 shadow-[var(--shadow-card)]">
+          <h2 className="font-semibold text-base mb-4">Internal Events</h2>
+          <div className="flex flex-col gap-3">
+            {bookingEvents.slice(0, 10).map((event) => (
+              <div key={event.id} className="flex items-center gap-3 text-sm">
+                <div className="size-2 rounded-full bg-accent flex-shrink-0" />
+                <span className="font-medium flex-1">{event.event_type}</span>
+                <span className="text-muted-foreground">
+                  {formatTs(event.created_at)}
                 </span>
               </div>
             ))}

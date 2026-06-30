@@ -23,6 +23,18 @@ export interface AvailabilitySlot {
   created_at: string;
 }
 
+export type PublicAvailabilityStatus =
+  | "available"
+  | "booked"
+  | "blocked"
+  | "past";
+
+export interface PublicAvailabilitySlot extends AvailabilitySlot {
+  availability_status: PublicAvailabilityStatus;
+  availability_label: string;
+  is_available: boolean;
+}
+
 export interface AvailabilityTemplate {
   id: string;
   day_of_week: number; // 0 = Sunday, 6 = Saturday
@@ -49,9 +61,28 @@ export interface Booking {
   notes: string | null;
   owner_notes: string | null; // private — never exposed to customer-facing APIs
   status: BookingStatus;
+  // ── Consent (Phase 2) — server-stamped at creation ──
+  privacy_notice_version: string | null;
+  terms_version: string | null;
+  customer_consent_at: string | null;
+  transactional_contact_consent: boolean;
+  environmental_ack_version: string | null;
+  environmental_ack_at: string | null;
+  // ── On-site safety (Phase 3) ──
+  vehicle_type: string | null;
+  vehicle_details: string | null;
+  parking_available: boolean | null;
+  water_available: boolean | null; // tri-state: true/false/null ("not sure")
+  electric_available: boolean | null; // tri-state: true/false/null ("not sure")
+  access_instructions: string | null;
+  site_safety_notes: string | null;
   completed_at: string | null;
   cancelled_at: string | null;
+  cancellation_reason: string | null;
+  cancellation_policy_version: string | null;
+  cancelled_by: string | null;
   declined_at: string | null;
+  status_reason: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -81,6 +112,7 @@ export interface OwnerBookingDetail extends Booking {
     AvailabilitySlot,
     "id" | "date" | "start_time" | "end_time"
   > | null;
+  booking_events?: BookingEvent[];
 }
 
 /** Slim booking row for the owner dashboard list */
@@ -96,6 +128,17 @@ export interface BookingListItem {
     service: { name: string } | null;
   }>;
   slot: { date: string; start_time: string } | null;
+}
+
+export interface BookingEvent {
+  id: string;
+  booking_id: string;
+  event_type: string;
+  actor_type: string;
+  actor_id: string | null;
+  source: string;
+  payload: Record<string, unknown>;
+  created_at: string;
 }
 
 // ─── FAQ ─────────────────────────────────────────────────────────────────────

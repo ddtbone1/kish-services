@@ -4,12 +4,53 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { BOOKING_STATUS } from "@/lib/constants/booking";
 import type {
   CreateSlotInput,
   CreateTemplateInput,
   GenerateSlotsInput,
 } from "@/lib/validations/availability";
-import type { AvailabilitySlot, AvailabilityTemplate } from "@/types";
+import type {
+  AvailabilitySlot,
+  AvailabilityTemplate,
+  PublicAvailabilitySlot,
+} from "@/types";
+
+const OCCUPYING_BOOKING_STATUSES = [
+  BOOKING_STATUS.PENDING,
+  BOOKING_STATUS.CONFIRMED,
+  BOOKING_STATUS.ON_THE_WAY,
+  BOOKING_STATUS.COMPLETED,
+] as const;
+
+function getManilaNow(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
+
+  const value = (type: string) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+
+  return {
+    date: `${value("year")}-${value("month")}-${value("day")}`,
+    minutes: Number(value("hour")) * 60 + Number(value("minute")),
+  };
+}
+
+function isFutureInManila(date: string, startTime: string): boolean {
+  const now = getManilaNow();
+  if (date > now.date) return true;
+  if (date < now.date) return false;
+
+  const [hours = 0, minutes = 0] = startTime.split(":").map(Number);
+  return hours * 60 + minutes > now.minutes;
+}
 
 export async function getSlotsByDateRange(
   from: string,
@@ -48,6 +89,97 @@ export async function getAvailableSlots(
 
   if (error) return { data: null, error: error.message };
   return { data: (data ?? []) as AvailabilitySlot[], error: null };
+}
+
+/**
+ * Returns every public slot for a date with a safe availability status. This
+ * powers the live picker: booked/blocked/past slots stay visible but disabled,
+ * while customer and booking details remain private.
+ */
+export async function getPublicAvailabilitySlots(
+  date: string,
+): Promise<{ data: PublicAvailabilitySlot[] | null; error: string | null }> {
+  const supabase = createAdminClient();
+
+  const { data: slots, error: slotsError } = await supabase
+    .from("availability_slots")
+    .select("*")
+    .eq("date", date)
+    .order("start_time", { ascending: true });
+
+  if (slotsError) return { data: null, error: slotsError.message };
+
+  const safeSlots = (slots ?? []) as AvailabilitySlot[];
+  if (safeSlots.length === 0) return { data: [], error: null };
+
+  const { data: bookings, error: bookingsError } = await supabase
+    .from("bookings")
+    .select("slot_id")
+    .in(
+      "slot_id",
+      safeSlots.map((slot) => slot.id),
+    )
+    .in("status", OCCUPYING_BOOKING_STATUSES);
+
+  if (bookingsError) return { data: null, error: bookingsError.message };
+
+  const bookedSlotIds = new Set(
+    (bookings ?? []).map((booking) => booking.slot_id as string),
+  );
+
+  return {
+    data: safeSlots.map((slot) => {
+      if (slot.is_blocked) {
+        return {
+          ...slot,
+          availability_status: "blocked",
+          availability_label: "Unavailable",
+          is_available: false,
+        };
+      }
+
+      if (!isFutureInManila(slot.date, slot.start_time)) {
+        return {
+          ...slot,
+          availability_status: "past",
+          availability_label: "Passed",
+          is_available: false,
+        };
+      }
+
+      if (bookedSlotIds.has(slot.id)) {
+        return {
+          ...slot,
+          availability_status: "booked",
+          availability_label: "Booked",
+          is_available: false,
+        };
+      }
+
+      return {
+        ...slot,
+        availability_status: "available",
+        availability_label: "Available",
+        is_available: true,
+      };
+    }),
+    error: null,
+  };
+}
+
+export async function getSlotDateById(
+  id: string,
+): Promise<{ data: string | null; error: string | null }> {
+  const supabase = createAdminClient();
+
+  const { data, error } = await supabase
+    .from("availability_slots")
+    .select("date")
+    .eq("id", id)
+    .single();
+
+  if (error) return { data: null, error: error.message };
+  return { data: data.date as string, error: null };
 }
 
 export async function createSlot(

@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // Use vi.hoisted so these are available when vi.mock factories are evaluated
 const mockSendMail = vi.hoisted(() => vi.fn());
 const mockFrom = vi.hoisted(() => vi.fn());
+const mockLogBookingEvent = vi.hoisted(() => vi.fn());
 
 vi.mock("nodemailer", () => ({
   default: {
@@ -27,6 +28,13 @@ vi.mock("@/lib/supabase/admin", () => ({
 vi.mock("@/lib/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
   requestContext: { getStore: vi.fn() },
+}));
+
+vi.mock("@/lib/services/booking-events.service", () => ({
+  BOOKING_EVENT_TYPE: {
+    EMAIL_RECORDED: "email_recorded",
+  },
+  logBookingEvent: mockLogBookingEvent,
 }));
 
 // Import after mocks are set up
@@ -50,9 +58,26 @@ function makeBooking(overrides: Partial<Booking> = {}): Booking {
     notes: null,
     owner_notes: null,
     status: BOOKING_STATUS.PENDING,
+    privacy_notice_version: null,
+    terms_version: null,
+    customer_consent_at: null,
+    transactional_contact_consent: false,
+    environmental_ack_version: null,
+    environmental_ack_at: null,
+    vehicle_type: null,
+    vehicle_details: null,
+    parking_available: null,
+    water_available: null,
+    electric_available: null,
+    access_instructions: null,
+    site_safety_notes: null,
     completed_at: null,
     cancelled_at: null,
+    cancellation_reason: null,
+    cancellation_policy_version: null,
+    cancelled_by: null,
     declined_at: null,
+    status_reason: null,
     created_at: "2026-05-22T10:00:00Z",
     updated_at: "2026-05-22T10:00:00Z",
     ...overrides,

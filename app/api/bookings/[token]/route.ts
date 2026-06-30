@@ -2,6 +2,10 @@ import {
   cancelBookingByToken,
   getBookingByToken,
 } from "@/lib/services/booking.service";
+import {
+  BOOKING_EVENT_TYPE,
+  logBookingEvent,
+} from "@/lib/services/booking-events.service";
 import { cancelBookingSchema } from "@/lib/validations/booking";
 import { NextResponse, type NextRequest } from "next/server";
 
@@ -51,10 +55,23 @@ export async function PATCH(
       );
     }
 
-    const { data, error } = await cancelBookingByToken(token);
+    const { data, error } = await cancelBookingByToken(
+      token,
+      parsed.data.reason,
+    );
 
     if (error) {
       return NextResponse.json({ error }, { status: 400 });
+    }
+
+    if (data) {
+      await logBookingEvent({
+        bookingId: data.id,
+        eventType: BOOKING_EVENT_TYPE.CUSTOMER_CANCELLED,
+        actorType: "customer",
+        source: "public_booking_page",
+        payload: { reason_provided: true },
+      });
     }
 
     return NextResponse.json({ data });

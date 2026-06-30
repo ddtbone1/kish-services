@@ -2,7 +2,7 @@
 // Purpose: Unit tests for availability service — slots and template functions
 // Added: 2026-05-22
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ─── Supabase mock ────────────────────────────────────────────────────────────
 
@@ -23,6 +23,7 @@ import {
   deleteTemplate,
   generateSlotsFromTemplates,
   getAvailableSlots,
+  getPublicAvailabilitySlots,
   getTemplates,
 } from "./availability.service";
 
@@ -89,6 +90,83 @@ describe("getAvailableSlots", () => {
 });
 
 // ─── getTemplates ─────────────────────────────────────────────────────────────
+
+describe("getPublicAvailabilitySlots", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-01T01:00:00Z")); // 09:00 Asia/Manila
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("returns every slot with a safe public status", async () => {
+    const fakeSlots = [
+      {
+        id: "slot-1",
+        date: "2026-06-01",
+        start_time: "10:00:00",
+        end_time: "11:00:00",
+        is_blocked: false,
+        created_at: "2026-06-01T00:00:00Z",
+      },
+      {
+        id: "slot-2",
+        date: "2026-06-01",
+        start_time: "11:00:00",
+        end_time: "12:00:00",
+        is_blocked: false,
+        created_at: "2026-06-01T00:00:00Z",
+      },
+      {
+        id: "slot-3",
+        date: "2026-06-01",
+        start_time: "12:00:00",
+        end_time: "13:00:00",
+        is_blocked: true,
+        created_at: "2026-06-01T00:00:00Z",
+      },
+    ];
+
+    const orderMock = vi
+      .fn()
+      .mockResolvedValueOnce({ data: fakeSlots, error: null });
+    const eqMock = vi.fn().mockReturnValue({ order: orderMock });
+    const selectSlotsMock = vi.fn().mockReturnValue({ eq: eqMock });
+
+    const inStatusMock = vi
+      .fn()
+      .mockResolvedValueOnce({ data: [{ slot_id: "slot-2" }], error: null });
+    const inSlotMock = vi.fn().mockReturnValue({ in: inStatusMock });
+    const selectBookingsMock = vi.fn().mockReturnValue({ in: inSlotMock });
+
+    const fromMock = vi.fn((table: string) => {
+      if (table === "availability_slots") return { select: selectSlotsMock };
+      if (table === "bookings") return { select: selectBookingsMock };
+      throw new Error(`Unexpected table ${table}`);
+    });
+
+    mockCreateAdminClient.mockReturnValue({
+      from: fromMock,
+    } as unknown as AdminSupabaseClient);
+
+    const result = await getPublicAvailabilitySlots("2026-06-01");
+
+    expect(result.error).toBeNull();
+    expect(result.data?.map((slot) => slot.availability_status)).toEqual([
+      "available",
+      "booked",
+      "blocked",
+    ]);
+    expect(result.data?.map((slot) => slot.is_available)).toEqual([
+      true,
+      false,
+      false,
+    ]);
+  });
+});
 
 describe("getTemplates", () => {
   beforeEach(() => vi.clearAllMocks());

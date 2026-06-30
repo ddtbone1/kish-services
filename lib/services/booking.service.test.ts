@@ -6,6 +6,11 @@ import {
   BOOKING_STATUS,
   VALID_STATUS_TRANSITIONS,
 } from "@/lib/constants/booking";
+import {
+  BOOKING_TERMS_VERSION,
+  PRIVACY_NOTICE_VERSION,
+} from "@/lib/constants/policy";
+import type { CreateBookingInput } from "@/lib/validations/booking";
 import type { Booking, PublicBooking } from "@/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -24,6 +29,7 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 
 import {
+  assessBookingRisk,
   cancelBookingByToken,
   createBooking,
   getBookingByToken,
@@ -44,15 +50,32 @@ function makePublicBooking(
     slot_id: "slot-001",
     customer_name: "Karl Marty",
     customer_email: "karl@example.com",
-    customer_phone: null,
+    customer_phone: "+639171234567",
     address_line1: "123 Main St",
     address_line2: null,
-    city: "General Santos City",
+    city: "General Santos",
     notes: null,
     status: BOOKING_STATUS.PENDING,
+    privacy_notice_version: null,
+    terms_version: null,
+    customer_consent_at: null,
+    transactional_contact_consent: false,
+    environmental_ack_version: null,
+    environmental_ack_at: null,
+    vehicle_type: null,
+    vehicle_details: null,
+    parking_available: null,
+    water_available: null,
+    electric_available: null,
+    access_instructions: null,
+    site_safety_notes: null,
     completed_at: null,
     cancelled_at: null,
+    cancellation_reason: null,
+    cancellation_policy_version: null,
+    cancelled_by: null,
     declined_at: null,
+    status_reason: null,
     created_at: "2026-05-22T10:00:00Z",
     updated_at: "2026-05-22T10:00:00Z",
     ...overrides,
@@ -111,20 +134,29 @@ describe("getBookingByToken", () => {
 // ─── createBooking (atomic RPC) ───────────────────────────────────────────────
 
 describe("createBooking", () => {
-  const INPUT = {
+  const INPUT: CreateBookingInput = {
     slot_id: "550e8400-e29b-41d4-a716-446655440000",
     service_ids: ["660e8400-e29b-41d4-a716-446655440000"],
     customer_name: "Karl Marty",
     customer_email: "karl@example.com",
-    customer_phone: undefined,
+    customer_phone: "+639171234567",
     address_line1: "123 Main St",
     address_line2: undefined,
-    city: "General Santos City",
+    city: "General Santos",
     notes: undefined,
+    accept_terms_privacy: true,
+    environmental_acknowledgement: true,
+    vehicle_type: "sedan",
+    parking_available: true,
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockAdminFrom.mockReturnValue({
+      update: vi.fn().mockReturnValue({
+        eq: vi.fn().mockResolvedValue({ error: null }),
+      }),
+    });
   });
 
   it("calls create_booking RPC with mapped params and returns the row (no owner_notes)", async () => {
@@ -147,11 +179,22 @@ describe("createBooking", () => {
       p_add_on_ids: [],
       p_customer_name: INPUT.customer_name,
       p_customer_email: INPUT.customer_email,
-      p_customer_phone: null,
+      p_customer_phone: INPUT.customer_phone,
       p_address_line1: INPUT.address_line1,
       p_address_line2: null,
       p_city: INPUT.city,
       p_notes: null,
+      // Consent is server-stamped, not taken from the client input.
+      p_privacy_notice_version: PRIVACY_NOTICE_VERSION,
+      p_terms_version: BOOKING_TERMS_VERSION,
+      p_transactional_contact_consent: true,
+      p_vehicle_type: "sedan",
+      p_vehicle_details: null,
+      p_parking_available: true,
+      p_water_available: null,
+      p_electric_available: null,
+      p_access_instructions: null,
+      p_site_safety_notes: null,
     });
   });
 
@@ -474,5 +517,55 @@ describe("updateBookingStatus", () => {
     const allStatuses = Object.values(BOOKING_STATUS);
     const transitionKeys = Object.keys(VALID_STATUS_TRANSITIONS);
     expect(transitionKeys.sort()).toEqual(allStatuses.sort());
+  });
+});
+
+// ─── assessBookingRisk ────────────────────────────────────────────────────────
+
+describe("assessBookingRisk", () => {
+  const base: CreateBookingInput = {
+    slot_id: "550e8400-e29b-41d4-a716-446655440000",
+    service_ids: ["660e8400-e29b-41d4-a716-446655440000"],
+    customer_name: "Karl Marty",
+    customer_email: "karl@example.com",
+    customer_phone: "0917 123 4567",
+    address_line1: "123 Real Street",
+    city: "General Santos", // core service area
+    accept_terms_privacy: true,
+    environmental_acknowledgement: true,
+    vehicle_type: "sedan",
+    parking_available: true,
+  };
+
+  const codes = (input: CreateBookingInput) =>
+    assessBookingRisk(input).map((f) => f.code);
+
+  it("returns no flags for a clean booking", () => {
+    expect(codes(base)).toEqual([]);
+  });
+
+  it("flags a vague address (too short or no digit)", () => {
+    expect(codes({ ...base, address_line1: "Near plaza" })).toContain(
+      "vague_address",
+    );
+  });
+
+  it("flags a weak/missing phone (< 7 digits)", () => {
+    expect(codes({ ...base, customer_phone: "12345" })).toContain("weak_phone");
+    expect(codes({ ...base, customer_phone: "" })).toContain("weak_phone");
+  });
+
+  it("flags an extended/manual-review service area", () => {
+    expect(codes({ ...base, city: "Surallah" })).toContain("location_review");
+  });
+
+  it("flags site resources ONLY when explicitly false (not 'Not sure')", () => {
+    expect(codes({ ...base, water_available: false })).toContain(
+      "site_resources_uncertain",
+    );
+    // undefined = "Not sure" (the default) must NOT flag — avoids noise.
+    expect(codes({ ...base, water_available: undefined })).not.toContain(
+      "site_resources_uncertain",
+    );
   });
 });

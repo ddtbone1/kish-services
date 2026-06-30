@@ -111,18 +111,29 @@ describe("getDashboardMetrics", () => {
     );
   });
 
-  it("propagates a Supabase rpc error instead of coercing to zero", async () => {
+  it("falls back to privacy-safe count queries when the rpc is unavailable", async () => {
     mockServerRpc.mockResolvedValue({
       data: null,
-      error: { message: "db exploded" },
+      error: { message: "Could not find the function public.get_booking_counts" },
     });
     // upcoming query — not reached but mock it to avoid null dereference
-    mockServerFrom.mockReturnValue(makeQuery({ count: 0, error: null }));
+    mockServerFrom.mockReturnValue(makeQuery({ count: 1, error: null }));
 
     const { data, error } = await getDashboardMetrics();
 
-    expect(data).toBeNull();
-    expect(error).toBe("db exploded");
+    expect(error).toBeNull();
+    expect(data).not.toBeNull();
+    expect(data!.counts).toEqual({
+      pending: 1,
+      confirmed: 1,
+      on_the_way: 1,
+      completed: 1,
+      cancelled: 1,
+      declined: 1,
+    });
+    expect(data!.total).toBe(6);
+    expect(data!.completedToday).toBe(1);
+    expect(data!.upcoming).toBe(1);
   });
 
   it("propagates the upcoming query error", async () => {

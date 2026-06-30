@@ -43,13 +43,32 @@ export function BookingStatusActions({
   if (nextStatuses.length === 0) return null;
 
   async function handleTransition(newStatus: BookingStatus) {
+    let reason: string | undefined;
+    if (DESTRUCTIVE_ACTIONS.has(newStatus)) {
+      const entered = window.prompt(
+        newStatus === BOOKING_STATUS.DECLINED
+          ? "Reason for declining this booking? Example: site unsuitable, outside service area, schedule conflict."
+          : "Reason for cancelling this booking?",
+      );
+      if (entered === null) return;
+      reason = entered.trim();
+      if (reason.length < 3) {
+        setError("Please provide a short reason.");
+        return;
+      }
+    }
+
     setLoading(newStatus);
     setError(null);
     try {
       const res = await fetch(`/api/dashboard/bookings/${bookingId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "update_status", status: newStatus }),
+        body: JSON.stringify({
+          action: "update_status",
+          status: newStatus,
+          ...(reason && { reason }),
+        }),
       });
       if (res.ok) {
         router.refresh();

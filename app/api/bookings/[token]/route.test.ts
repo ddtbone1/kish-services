@@ -11,10 +11,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockGetBookingByToken = vi.hoisted(() => vi.fn());
 const mockCancelBookingByToken = vi.hoisted(() => vi.fn());
+const mockLogBookingEvent = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/services/booking.service", () => ({
   getBookingByToken: mockGetBookingByToken,
   cancelBookingByToken: mockCancelBookingByToken,
+}));
+
+vi.mock("@/lib/services/booking-events.service", () => ({
+  BOOKING_EVENT_TYPE: {
+    CUSTOMER_CANCELLED: "customer_cancelled",
+  },
+  logBookingEvent: mockLogBookingEvent,
 }));
 
 import { GET, PATCH } from "./route";
@@ -37,9 +45,26 @@ function makeBooking(overrides: Partial<PublicBooking> = {}): PublicBooking {
     city: "General Santos City",
     notes: null,
     status: BOOKING_STATUS.PENDING,
+    privacy_notice_version: null,
+    terms_version: null,
+    customer_consent_at: null,
+    transactional_contact_consent: false,
+    environmental_ack_version: null,
+    environmental_ack_at: null,
+    vehicle_type: null,
+    vehicle_details: null,
+    parking_available: null,
+    water_available: null,
+    electric_available: null,
+    access_instructions: null,
+    site_safety_notes: null,
     completed_at: null,
     cancelled_at: null,
+    cancellation_reason: null,
+    cancellation_policy_version: null,
+    cancelled_by: null,
     declined_at: null,
+    status_reason: null,
     created_at: "2026-05-22T10:00:00Z",
     updated_at: "2026-05-22T10:00:00Z",
     ...overrides,
@@ -119,19 +144,22 @@ describe("PATCH /api/bookings/[token]", () => {
     });
 
     const res = await PATCH(
-      makePatchRequest(VALID_UUID, { action: "cancel" }),
+      makePatchRequest(VALID_UUID, { action: "cancel", reason: "Changed plans" }),
       { params: Promise.resolve({ token: VALID_UUID }) },
     );
 
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.data.status).toBe(BOOKING_STATUS.CANCELLED);
-    expect(mockCancelBookingByToken).toHaveBeenCalledWith(VALID_UUID);
+    expect(mockCancelBookingByToken).toHaveBeenCalledWith(
+      VALID_UUID,
+      "Changed plans",
+    );
   });
 
   it("returns 404 for a non-UUID token without hitting the service", async () => {
     const res = await PATCH(
-      makePatchRequest(INVALID_TOKEN, { action: "cancel" }),
+      makePatchRequest(INVALID_TOKEN, { action: "cancel", reason: "Changed plans" }),
       { params: Promise.resolve({ token: INVALID_TOKEN }) },
     );
 
@@ -165,7 +193,7 @@ describe("PATCH /api/bookings/[token]", () => {
     });
 
     const res = await PATCH(
-      makePatchRequest(VALID_UUID, { action: "cancel" }),
+      makePatchRequest(VALID_UUID, { action: "cancel", reason: "Changed plans" }),
       { params: Promise.resolve({ token: VALID_UUID }) },
     );
 

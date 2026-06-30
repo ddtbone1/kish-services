@@ -10,6 +10,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
 const mockCreateBooking = vi.hoisted(() => vi.fn());
+const mockAssessBookingRisk = vi.hoisted(() => vi.fn(() => []));
+const mockGetSlotDateById = vi.hoisted(() => vi.fn());
+const mockLogBookingEvent = vi.hoisted(() => vi.fn());
 const mockSendBookingEmail = vi.hoisted(() => vi.fn());
 const mockSendAdminNotification = vi.hoisted(() => vi.fn());
 const mockCheckRateLimit = vi.hoisted(() => vi.fn());
@@ -20,6 +23,19 @@ const mockRevalidateTag = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/services/booking.service", () => ({
   createBooking: mockCreateBooking,
+  assessBookingRisk: mockAssessBookingRisk,
+}));
+
+vi.mock("@/lib/services/booking-events.service", () => ({
+  BOOKING_EVENT_TYPE: {
+    BOOKING_CREATED: "booking_created",
+    RISK_FLAGGED: "risk_flagged",
+  },
+  logBookingEvent: mockLogBookingEvent,
+}));
+
+vi.mock("@/lib/services/availability.service", () => ({
+  getSlotDateById: mockGetSlotDateById,
 }));
 
 vi.mock("@/lib/services/email.service", () => ({
@@ -51,6 +67,15 @@ vi.mock("next/cache", () => ({
   revalidateTag: mockRevalidateTag,
 }));
 
+// Run after() callbacks synchronously so the deferred admin notification is
+// observable in tests (preserves the real NextRequest/NextResponse).
+vi.mock("next/server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/server")>()),
+  after: (fn: () => unknown) => {
+    void fn();
+  },
+}));
+
 import { POST } from "./route";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -60,8 +85,14 @@ const VALID_BODY = {
   service_ids: ["660e8400-e29b-41d4-a716-446655440000"],
   customer_name: "Karl Marty",
   customer_email: "karl@example.com",
+  customer_phone: "0917 123 4567",
   address_line1: "123 Main St",
-  city: "General Santos City",
+  city: "General Santos",
+  // Consent + required site fields (Phase 2/3)
+  accept_terms_privacy: true,
+  environmental_acknowledgement: true,
+  vehicle_type: "sedan",
+  parking_available: true,
 };
 
 function makeBooking(overrides: Partial<PublicBooking> = {}): PublicBooking {
@@ -71,15 +102,32 @@ function makeBooking(overrides: Partial<PublicBooking> = {}): PublicBooking {
     slot_id: VALID_BODY.slot_id,
     customer_name: "Karl Marty",
     customer_email: "karl@example.com",
-    customer_phone: null,
+    customer_phone: "+639171234567",
     address_line1: "123 Main St",
     address_line2: null,
-    city: "General Santos City",
+    city: "General Santos",
     notes: null,
     status: BOOKING_STATUS.PENDING,
+    privacy_notice_version: null,
+    terms_version: null,
+    customer_consent_at: null,
+    transactional_contact_consent: false,
+    environmental_ack_version: null,
+    environmental_ack_at: null,
+    vehicle_type: null,
+    vehicle_details: null,
+    parking_available: null,
+    water_available: null,
+    electric_available: null,
+    access_instructions: null,
+    site_safety_notes: null,
     completed_at: null,
     cancelled_at: null,
+    cancellation_reason: null,
+    cancellation_policy_version: null,
+    cancelled_by: null,
     declined_at: null,
+    status_reason: null,
     created_at: "2026-06-24T10:00:00Z",
     updated_at: "2026-06-24T10:00:00Z",
     ...overrides,
@@ -103,6 +151,12 @@ describe("POST /api/bookings", () => {
     mockCheckRateLimit.mockResolvedValue({ limited: false, retryAfter: 0 });
     mockSendBookingEmail.mockResolvedValue({ error: null });
     mockSendAdminNotification.mockResolvedValue({ error: null });
+    mockAssessBookingRisk.mockReturnValue([]);
+    mockLogBookingEvent.mockResolvedValue(undefined);
+    mockGetSlotDateById.mockResolvedValue({
+      data: "2026-06-24",
+      error: null,
+    });
     // Default: no idempotency key used (fresh key)
     mockCheckIdempotencyKey.mockResolvedValue({ status: "new" });
     mockStoreIdempotencyKey.mockResolvedValue(undefined);

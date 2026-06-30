@@ -36,6 +36,28 @@ export const VALID_STATUS_TRANSITIONS: Record<BookingStatus, BookingStatus[]> =
     [BOOKING_STATUS.DECLINED]: [],
   };
 
+/**
+ * Statuses in which the customer may still modify their own booking
+ * (cancel or reschedule). Single source of truth for customer-facing action
+ * eligibility — consumed by both the client UI and server guards so they can
+ * never disagree. Note: for every status here, `VALID_STATUS_TRANSITIONS`
+ * also permits the cancellation transition, so cancel stays a legal move.
+ */
+export const CUSTOMER_ACTIONABLE_STATUSES: readonly BookingStatus[] = [
+  BOOKING_STATUS.PENDING,
+  BOOKING_STATUS.CONFIRMED,
+];
+
+/** Whether the customer may cancel a booking in the given status. */
+export function canCustomerCancel(status: BookingStatus): boolean {
+  return CUSTOMER_ACTIONABLE_STATUSES.includes(status);
+}
+
+/** Whether the customer may reschedule a booking in the given status. */
+export function canCustomerReschedule(status: BookingStatus): boolean {
+  return CUSTOMER_ACTIONABLE_STATUSES.includes(status);
+}
+
 export const EMAIL_NOTIFICATION_TYPE = {
   BOOKING_CONFIRMATION: "booking_confirmation",
   BOOKING_CONFIRMED: "booking_confirmed",

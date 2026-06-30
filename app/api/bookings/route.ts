@@ -5,12 +5,17 @@ import {
 } from "@/lib/idempotency";
 import { logger } from "@/lib/logger";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
-import { createBooking } from "@/lib/services/booking.service";
+import { assessBookingRisk, createBooking } from "@/lib/services/booking.service";
+import {
+  BOOKING_EVENT_TYPE,
+  logBookingEvent,
+} from "@/lib/services/booking-events.service";
 import { sendAdminNotification } from "@/lib/services/email.service";
+import { getSlotDateById } from "@/lib/services/availability.service";
 import { withRequestContext } from "@/lib/utils/with-request-context";
 import { createBookingSchema } from "@/lib/validations/booking";
 import type { Booking } from "@/types";
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, after, type NextRequest } from "next/server";
 import { revalidateTag } from "next/cache";
 
 export async function POST(request: NextRequest) {
@@ -105,25 +110,64 @@ export async function POST(request: NextRequest) {
 
       const responseBody = { data };
 
+      await logBookingEvent({
+        bookingId: data.id,
+        eventType: BOOKING_EVENT_TYPE.BOOKING_CREATED,
+        actorType: "customer",
+        source: "public_booking_form",
+        payload: {
+          service_count: parsed.data.service_ids.length,
+        },
+      });
+
+      const riskFlags = assessBookingRisk(parsed.data);
+      if (riskFlags.length > 0) {
+        await logBookingEvent({
+          bookingId: data.id,
+          eventType: BOOKING_EVENT_TYPE.RISK_FLAGGED,
+          actorType: "system",
+          source: "booking_risk_rules",
+          payload: {
+            flags: riskFlags,
+          },
+        });
+      }
+
       // Store the idempotency key so replays get the cached response.
       if (idempotencyKey) {
         await storeIdempotencyKey(idempotencyKey, bodyHash, responseBody, 201);
       }
 
-      // The booking service returns the booking row, not the joined slot row.
-      // Date-specific availability caches also carry the shared availability tag.
+      // Keep availability consumers fresh. Public single-date reads are no-store,
+      // but admin/generated views may still carry availability tags.
       revalidateTag("availability", "max");
+      const { data: bookedDate, error: bookedDateError } =
+        await getSlotDateById(data.slot_id);
+      if (bookedDate) {
+        revalidateTag(`availability-${bookedDate}`, "max");
+      } else if (bookedDateError) {
+        logger.warn("Could not revalidate date-specific availability", {
+          slotId: data.slot_id,
+          error: bookedDateError,
+        });
+      }
 
       // Alert the owner about the new booking (fire-and-forget).
       // Customer email is deferred — sent by the owner's status-change action
       // (BOOKING_CONFIRMED, BOOKING_DECLINED, etc.) so the customer only hears
       // once the booking has been reviewed, not immediately on submission.
       const bookingForEmail: Booking = { ...data, owner_notes: null };
-      sendAdminNotification(bookingForEmail).catch((err) =>
-        logger.error("sendAdminNotification fire-and-forget failed", {
-          error: String(err),
-        }),
-      );
+      // Defer with after() so the SMTP send + retry backoff completes on
+      // serverless instead of being cut off when the function suspends.
+      after(async () => {
+        try {
+          await sendAdminNotification(bookingForEmail);
+        } catch (err) {
+          logger.error("sendAdminNotification fire-and-forget failed", {
+            error: String(err),
+          });
+        }
+      });
 
       return NextResponse.json(responseBody, { status: 201 });
     } catch {

@@ -12,13 +12,16 @@ import {
 // ─── cancelBookingSchema ──────────────────────────────────────────────────────
 
 describe("cancelBookingSchema", () => {
-  it("passes for { action: 'cancel' }", () => {
-    const result = cancelBookingSchema.safeParse({ action: "cancel" });
+  it("passes for cancel with a reason", () => {
+    const result = cancelBookingSchema.safeParse({
+      action: "cancel",
+      reason: "Schedule changed",
+    });
     expect(result.success).toBe(true);
   });
 
-  it("fails when action is missing", () => {
-    const result = cancelBookingSchema.safeParse({});
+  it("fails when action or reason is missing", () => {
+    const result = cancelBookingSchema.safeParse({ action: "cancel" });
     expect(result.success).toBe(false);
   });
 
@@ -71,13 +74,71 @@ describe("createBookingSchema", () => {
     service_ids: ["660e8400-e29b-41d4-a716-446655440000"],
     customer_name: "Karl Marty",
     customer_email: "karl@example.com",
+    customer_phone: "0917 123 4567",
     address_line1: "123 Main St",
-    city: "General Santos City",
+    city: "General Santos",
+    // Consent + required site fields (Phase 2/3)
+    accept_terms_privacy: true,
+    environmental_acknowledgement: true,
+    vehicle_type: "sedan",
+    parking_available: true,
   };
 
   it("passes for a valid booking input", () => {
     const result = createBookingSchema.safeParse(VALID_INPUT);
     expect(result.success).toBe(true);
+  });
+
+  it("fails when consent (accept_terms_privacy) is not true", () => {
+    for (const value of [false, undefined]) {
+      const result = createBookingSchema.safeParse({
+        ...VALID_INPUT,
+        accept_terms_privacy: value,
+      });
+      expect(result.success).toBe(false);
+    }
+  });
+
+  it("fails when vehicle_type is missing or unknown", () => {
+    for (const vehicle_type of [undefined, "spaceship"]) {
+      const result = createBookingSchema.safeParse({
+        ...VALID_INPUT,
+        vehicle_type,
+      });
+      expect(result.success).toBe(false);
+    }
+  });
+
+  it("requires vehicle_details only when vehicle_type is 'other'", () => {
+    const missing = createBookingSchema.safeParse({
+      ...VALID_INPUT,
+      vehicle_type: "other",
+    });
+    expect(missing.success).toBe(false);
+
+    const provided = createBookingSchema.safeParse({
+      ...VALID_INPUT,
+      vehicle_type: "other",
+      vehicle_details: "box truck",
+    });
+    expect(provided.success).toBe(true);
+  });
+
+  it("requires parking_available", () => {
+    const result = createBookingSchema.safeParse({
+      ...VALID_INPUT,
+      parking_available: undefined,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("treats water/electric as optional (Not sure → omitted)", () => {
+    const result = createBookingSchema.safeParse(VALID_INPUT);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.water_available).toBeUndefined();
+      expect(result.data.electric_available).toBeUndefined();
+    }
   });
 
   it("fails when slot_id is not a UUID", () => {
@@ -122,12 +183,64 @@ describe("createBookingSchema", () => {
     }
   });
 
+  it("fails when environmental acknowledgement is not true", () => {
+    for (const value of [false, undefined]) {
+      const result = createBookingSchema.safeParse({
+        ...VALID_INPUT,
+        environmental_acknowledgement: value,
+      });
+      expect(result.success).toBe(false);
+    }
+  });
+
+  it("normalizes valid Philippine mobile numbers", () => {
+    const result = createBookingSchema.safeParse({
+      ...VALID_INPUT,
+      customer_phone: "0917-123-4567",
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.customer_phone).toBe("+639171234567");
+    }
+  });
+
+  it("fails when customer_phone is missing or outside PH mobile format", () => {
+    for (const customer_phone of [undefined, "", "+1 555 000 0000"]) {
+      const result = createBookingSchema.safeParse({
+        ...VALID_INPUT,
+        customer_phone,
+      });
+      expect(result.success).toBe(false);
+    }
+  });
+
+  it("fails when city is outside the service-area dropdown", () => {
+    const result = createBookingSchema.safeParse({
+      ...VALID_INPUT,
+      city: "Davao City",
+    });
+
+    expect(result.success).toBe(false);
+  });
+
   it("fails when customer_name is too short", () => {
     const result = createBookingSchema.safeParse({
       ...VALID_INPUT,
       customer_name: "K",
     });
     expect(result.success).toBe(false);
+  });
+
+  it("fails when customer_name contains numbers", () => {
+    const result = createBookingSchema.safeParse({
+      ...VALID_INPUT,
+      customer_name: "Karl123 Marty",
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.flatten().fieldErrors.customer_name).toBeTruthy();
+    }
   });
 
   it("fails when notes exceeds 500 characters", () => {

@@ -5,8 +5,17 @@
 import {
   BOOKING_STATUS,
   VALID_STATUS_TRANSITIONS,
+  canCustomerCancel,
   type BookingStatus,
 } from "@/lib/constants/booking";
+import {
+  BOOKING_TERMS_VERSION,
+  CANCELLATION_POLICY,
+  ENVIRONMENTAL_ACK_VERSION,
+  PRIVACY_NOTICE_VERSION,
+} from "@/lib/constants/policy";
+import { SERVICE_AREA_STATUS, getServiceArea } from "@/lib/constants/service-area";
+import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { CreateBookingInput } from "@/lib/validations/booking";
@@ -21,12 +30,49 @@ import type { Booking, BookingWithItems, PublicBooking } from "@/types";
  */
 export type BookingErrorCode = "conflict" | "invalid" | "error";
 
+export interface BookingRiskFlag {
+  code: string;
+  severity: "low" | "medium";
+}
+
 /** Maps a Postgres SQLSTATE from create_booking() to a BookingErrorCode. */
 function mapBookingError(pgCode: string | undefined): BookingErrorCode {
   // PT409 = slot conflict (raised); 23505 = unique-index race backstop.
   if (pgCode === "PT409" || pgCode === "23505") return "conflict";
   if (pgCode === "PT422") return "invalid";
   return "error";
+}
+
+function assessBookingRisk(input: CreateBookingInput): BookingRiskFlag[] {
+  const flags: BookingRiskFlag[] = [];
+  const address = input.address_line1.trim();
+  const area = getServiceArea(input.city);
+
+  if (address.length < 10 || !/\d/.test(address)) {
+    flags.push({ code: "vague_address", severity: "medium" });
+  }
+
+  // Weak/missing phone: no number, or fewer than 7 digits once non-digits are
+  // stripped (matches the validation's min length for a usable contact number).
+  const phoneDigits = (input.customer_phone ?? "").replace(/\D/g, "");
+  if (phoneDigits.length < 7) {
+    flags.push({ code: "weak_phone", severity: "medium" });
+  }
+
+  if (
+    area?.status === SERVICE_AREA_STATUS.EXTENDED ||
+    area?.status === SERVICE_AREA_STATUS.MANUAL_REVIEW
+  ) {
+    flags.push({ code: "location_review", severity: "medium" });
+  }
+
+  // Only flag when the customer explicitly said "No". "Not sure" (null/omitted)
+  // is the default and would otherwise flag nearly every booking.
+  if (input.water_available === false || input.electric_available === false) {
+    flags.push({ code: "site_resources_uncertain", severity: "low" });
+  }
+
+  return flags;
 }
 
 /**
@@ -65,6 +111,19 @@ export async function createBooking(input: CreateBookingInput): Promise<{
     p_address_line2: input.address_line2 ?? null,
     p_city: input.city,
     p_notes: input.notes ?? null,
+    // Consent: versions + timestamp are server-stamped (never trust the client).
+    // Reaching here means Zod already enforced accept_terms_privacy === true.
+    p_privacy_notice_version: PRIVACY_NOTICE_VERSION,
+    p_terms_version: BOOKING_TERMS_VERSION,
+    p_transactional_contact_consent: true,
+    // On-site safety fields.
+    p_vehicle_type: input.vehicle_type,
+    p_vehicle_details: input.vehicle_details ?? null,
+    p_parking_available: input.parking_available,
+    p_water_available: input.water_available ?? null,
+    p_electric_available: input.electric_available ?? null,
+    p_access_instructions: input.access_instructions ?? null,
+    p_site_safety_notes: input.site_safety_notes ?? null,
   });
 
   if (error || !data) {
@@ -75,12 +134,39 @@ export async function createBooking(input: CreateBookingInput): Promise<{
     };
   }
 
+  const bookingRow = data as Booking;
+  const now = new Date().toISOString();
+  // Environmental acknowledgement is stamped here (not in the RPC). Reaching
+  // this point means Zod enforced environmental_acknowledgement === true. The
+  // booking itself already succeeded, so a failure here is logged, not fatal.
+  const { error: ackError } = await supabase
+    .from("bookings")
+    .update({
+      environmental_ack_version: ENVIRONMENTAL_ACK_VERSION,
+      environmental_ack_at: now,
+      updated_at: now,
+    })
+    .eq("id", bookingRow.id);
+
+  if (ackError) {
+    logger.warn("environmental ack stamp failed", {
+      bookingId: bookingRow.id,
+      error: ackError.message,
+    });
+  }
+
   // The function returns the full bookings row (RETURNS bookings); strip the
   // private owner_notes column before returning to the public flow.
-  const { owner_notes: _ownerNotes, ...publicBooking } = data as Booking;
+  const { owner_notes: _ownerNotes, ...publicBooking } = {
+    ...bookingRow,
+    environmental_ack_version: ENVIRONMENTAL_ACK_VERSION,
+    environmental_ack_at: now,
+  };
   void _ownerNotes;
   return { data: publicBooking as PublicBooking, error: null, code: null };
 }
+
+export { assessBookingRisk };
 
 /**
  * Fetches a booking by its reference token, including all service packages.
@@ -167,6 +253,7 @@ export async function updateBookingStatus(
  */
 export async function cancelBookingByToken(
   token: string,
+  reason?: string,
 ): Promise<{ data: PublicBooking | null; error: string | null }> {
   // Admin client required — anon role has no UPDATE policy on bookings.
   // Security: token is validated via .eq("reference_token", token) before any write.
@@ -182,8 +269,10 @@ export async function cancelBookingByToken(
     return { data: null, error: "Booking not found" };
   }
 
-  const allowed = VALID_STATUS_TRANSITIONS[current.status as BookingStatus];
-  if (!allowed.includes(BOOKING_STATUS.CANCELLED)) {
+  // Customer cancel eligibility comes from the shared action-policy (single
+  // source of truth with the client UI). Behaviour matches the prior
+  // VALID_STATUS_TRANSITIONS check: only pending/confirmed are cancellable.
+  if (!canCustomerCancel(current.status as BookingStatus)) {
     return {
       data: null,
       error: `Cannot cancel a booking with status '${current.status}'`,
@@ -196,11 +285,14 @@ export async function cancelBookingByToken(
     .update({
       status: BOOKING_STATUS.CANCELLED,
       cancelled_at: now,
+      cancellation_reason: reason ?? null,
+      cancellation_policy_version: CANCELLATION_POLICY.version,
+      cancelled_by: "customer",
       updated_at: now,
     })
     .eq("id", current.id)
     .select(
-      "id, reference_token, slot_id, customer_name, customer_email, customer_phone, address_line1, address_line2, city, notes, status, completed_at, cancelled_at, declined_at, created_at, updated_at",
+      "id, reference_token, slot_id, customer_name, customer_email, customer_phone, address_line1, address_line2, city, notes, status, completed_at, cancelled_at, cancellation_reason, cancellation_policy_version, cancelled_by, declined_at, created_at, updated_at",
     )
     .single();
 

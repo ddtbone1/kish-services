@@ -12,10 +12,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mockGetUser = vi.hoisted(() => vi.fn());
 const mockUpdateBookingStatus = vi.hoisted(() => vi.fn());
 const mockSendBookingEmail = vi.hoisted(() => vi.fn());
+const mockLogBookingEvent = vi.hoisted(() => vi.fn());
+const mockFrom = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(() => ({
     auth: { getUser: mockGetUser },
+    from: mockFrom,
   })),
 }));
 
@@ -27,8 +30,25 @@ vi.mock("@/lib/services/email.service", () => ({
   sendBookingEmail: mockSendBookingEmail,
 }));
 
+vi.mock("@/lib/services/booking-events.service", () => ({
+  BOOKING_EVENT_TYPE: {
+    STATUS_CHANGED: "status_changed",
+    OWNER_NOTES_UPDATED: "owner_notes_updated",
+  },
+  logBookingEvent: mockLogBookingEvent,
+}));
+
 vi.mock("next/cache", () => ({
   revalidateTag: vi.fn(),
+}));
+
+// Run after() callbacks synchronously so deferred email sends are observable in
+// tests (preserves the real NextRequest/NextResponse via importOriginal).
+vi.mock("next/server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/server")>()),
+  after: (fn: () => unknown) => {
+    void fn();
+  },
 }));
 
 // Import route handler after mocks are declared
@@ -50,9 +70,26 @@ function makeBooking(overrides: Partial<Booking> = {}): Booking {
     notes: null,
     owner_notes: null,
     status: BOOKING_STATUS.CONFIRMED,
+    privacy_notice_version: null,
+    terms_version: null,
+    customer_consent_at: null,
+    transactional_contact_consent: false,
+    environmental_ack_version: null,
+    environmental_ack_at: null,
+    vehicle_type: null,
+    vehicle_details: null,
+    parking_available: null,
+    water_available: null,
+    electric_available: null,
+    access_instructions: null,
+    site_safety_notes: null,
     completed_at: null,
     cancelled_at: null,
+    cancellation_reason: null,
+    cancellation_policy_version: null,
+    cancelled_by: null,
     declined_at: null,
+    status_reason: null,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     ...overrides,
@@ -81,6 +118,12 @@ describe("PATCH /api/dashboard/bookings/[id]", () => {
     mockGetUser.mockResolvedValue({ data: { user: { id: "owner-1" } } });
     // sendBookingEmail resolves so fire-and-forget doesn't throw
     mockSendBookingEmail.mockResolvedValue({ error: null });
+    mockLogBookingEvent.mockResolvedValue(undefined);
+    mockFrom.mockReturnValue({
+      update: vi.fn().mockReturnValue({
+        eq: vi.fn().mockResolvedValue({ error: null }),
+      }),
+    });
   });
 
   describe("update_status — email triggers", () => {
@@ -235,5 +278,71 @@ describe("PATCH /api/dashboard/bookings/[id]", () => {
 
       expect(mockSendBookingEmail).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("PATCH /api/dashboard/bookings/[id] — resend_email", () => {
+  // Mutated per test, then read by the mocked select chain below.
+  let bookingRow: Booking;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    mockGetUser.mockResolvedValue({ data: { user: { id: "owner-1" } } });
+    mockSendBookingEmail.mockResolvedValue({ error: null });
+    // The update_notes test overrides createClient's return value (with a
+    // select-less `from`), and clearAllMocks keeps that. Re-establish the
+    // client so `supabase.from(...).select(...)` resolves here.
+    vi.mocked(
+      await import("@/lib/supabase/server"),
+    ).createClient.mockReturnValue({
+      auth: { getUser: mockGetUser },
+      from: mockFrom,
+    } as never);
+    bookingRow = makeBooking({ status: BOOKING_STATUS.ON_THE_WAY });
+    mockFrom.mockImplementation(() => ({
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          single: vi.fn().mockResolvedValue({ data: bookingRow, error: null }),
+        }),
+      }),
+    }));
+  });
+
+  it("resends the email matching the booking's current status", async () => {
+    bookingRow = makeBooking({ status: BOOKING_STATUS.ON_THE_WAY });
+
+    const res = await PATCH(
+      makeRequest({ action: "resend_email" }),
+      ROUTE_PARAMS,
+    );
+
+    expect(res.status).toBe(200);
+    await Promise.resolve();
+    expect(mockSendBookingEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "booking_on_the_way" }),
+    );
+  });
+
+  it("returns 400 when the status has no email to resend (pending)", async () => {
+    bookingRow = makeBooking({ status: BOOKING_STATUS.PENDING });
+
+    const res = await PATCH(
+      makeRequest({ action: "resend_email" }),
+      ROUTE_PARAMS,
+    );
+
+    expect(res.status).toBe(400);
+    expect(mockSendBookingEmail).not.toHaveBeenCalled();
+  });
+
+  it("returns 401 when not authenticated", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: null } });
+
+    const res = await PATCH(
+      makeRequest({ action: "resend_email" }),
+      ROUTE_PARAMS,
+    );
+
+    expect(res.status).toBe(401);
   });
 });

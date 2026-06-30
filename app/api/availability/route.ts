@@ -7,21 +7,13 @@
 
 import {
   createSlot,
-  getAvailableSlots,
+  getPublicAvailabilitySlots,
   getSlotsByDateRange,
 } from "@/lib/services/availability.service";
 import { createClient } from "@/lib/supabase/server";
 import { createSlotSchema } from "@/lib/validations/availability";
 import { NextResponse, type NextRequest } from "next/server";
-import { revalidateTag, unstable_cache } from "next/cache";
-
-function getCachedSlotsForDate(date: string) {
-  return unstable_cache(
-    () => getAvailableSlots(date),
-    [`availability-${date}`],
-    { revalidate: 60, tags: [`availability-${date}`, "availability"] },
-  )();
-}
+import { revalidateTag } from "next/cache";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -61,9 +53,16 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const { data, error } = await getCachedSlotsForDate(date);
+  const { data, error } = await getPublicAvailabilitySlots(date);
   if (error) return NextResponse.json({ error }, { status: 500 });
-  return NextResponse.json({ data });
+  return NextResponse.json(
+    { data },
+    {
+      headers: {
+        "Cache-Control": "no-store, max-age=0",
+      },
+    },
+  );
 }
 
 export async function POST(request: NextRequest) {

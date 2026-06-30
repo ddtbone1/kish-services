@@ -6,6 +6,11 @@ import {
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAppUrl } from "@/lib/utils/app-url";
 import { logger } from "@/lib/logger";
+import { SITE_REQUIREMENTS } from "@/lib/constants/policy";
+import {
+  BOOKING_EVENT_TYPE,
+  logBookingEvent,
+} from "@/lib/services/booking-events.service";
 import type { Booking } from "@/types";
 import nodemailer, { type SendMailOptions } from "nodemailer";
 
@@ -92,6 +97,18 @@ export async function sendBookingEmail({
     sent_at: new Date().toISOString(),
   });
 
+  await logBookingEvent({
+    bookingId: booking.id,
+    eventType: BOOKING_EVENT_TYPE.EMAIL_RECORDED,
+    actorType: "system",
+    source: "email_service",
+    payload: {
+      type,
+      status: errorMessage ? EMAIL_STATUS.FAILED : EMAIL_STATUS.SENT,
+      retry_count: retryCount,
+    },
+  });
+
   return { error: errorMessage };
 }
 
@@ -161,6 +178,18 @@ export async function sendAdminNotification(
     sent_at: new Date().toISOString(),
   });
 
+  await logBookingEvent({
+    bookingId: booking.id,
+    eventType: BOOKING_EVENT_TYPE.EMAIL_RECORDED,
+    actorType: "system",
+    source: "email_service",
+    payload: {
+      type: EMAIL_NOTIFICATION_TYPE.ADMIN_BOOKING_ALERT,
+      status: errorMessage ? EMAIL_STATUS.FAILED : EMAIL_STATUS.SENT,
+      retry_count: retryCount,
+    },
+  });
+
   return { error: errorMessage };
 }
 
@@ -190,6 +219,13 @@ function getSubjectForType(type: EmailNotificationType): string {
 function getBodyForType(booking: Booking, type: EmailNotificationType): string {
   const appUrl = getAppUrl();
   const bookingLink = `${appUrl}/booking/${booking.reference_token}`;
+  const siteFooter = `
+    <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0;" />
+    <p><strong>Site and environmental reminder</strong></p>
+    <p>${SITE_REQUIREMENTS.safeWorkArea}</p>
+    <p>${SITE_REQUIREMENTS.runoffResponsibility}</p>
+    <p>If the location is unsafe or unsuitable for runoff/wastewater handling, the booking may need to be declined or rescheduled.</p>
+  `;
 
   switch (type) {
     case EMAIL_NOTIFICATION_TYPE.BOOKING_CONFIRMATION:
@@ -197,12 +233,14 @@ function getBodyForType(booking: Booking, type: EmailNotificationType): string {
         <h2>Thanks for your booking, ${booking.customer_name}!</h2>
         <p>We've received your booking request and will confirm it shortly.</p>
         <p><a href="${bookingLink}">View or manage your booking</a></p>
+        ${siteFooter}
       `;
     case EMAIL_NOTIFICATION_TYPE.BOOKING_CONFIRMED:
       return `
         <h2>Your booking is confirmed!</h2>
         <p>Hi ${booking.customer_name}, your auto detailing appointment has been confirmed. We look forward to seeing you!</p>
         <p><a href="${bookingLink}">View booking details</a></p>
+        ${siteFooter}
       `;
     case EMAIL_NOTIFICATION_TYPE.BOOKING_ON_THE_WAY:
       return `
@@ -210,6 +248,7 @@ function getBodyForType(booking: Booking, type: EmailNotificationType): string {
         <p>Hi ${booking.customer_name}, your Kish Auto Detailing team is heading to your location now.</p>
         <p>Please make sure your vehicle is accessible. See you soon!</p>
         <p><a href="${bookingLink}">View booking details</a></p>
+        ${siteFooter}
       `;
     case EMAIL_NOTIFICATION_TYPE.BOOKING_COMPLETED:
       return `
