@@ -1190,9 +1190,24 @@ export function BookingForm({
               />
               <span className="text-foreground/80">
                 I agree to the{" "}
-                <span className="font-semibold">Terms of Service</span> and{" "}
-                <span className="font-semibold">Privacy Notice</span>, including
-                the on-site safety and wastewater responsibilities.
+                <a
+                  href="/terms"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-semibold text-accent hover:opacity-80"
+                >
+                  Terms of Service
+                </a>{" "}
+                and{" "}
+                <a
+                  href="/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-semibold text-accent hover:opacity-80"
+                >
+                  Privacy Notice
+                </a>
+                , including the on-site safety and wastewater responsibilities.
               </span>
             </label>
             <p className="text-xs text-muted-foreground pl-7">

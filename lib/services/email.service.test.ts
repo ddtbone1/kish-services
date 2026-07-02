@@ -2,7 +2,10 @@
 // Purpose: Unit tests for sendAdminNotification in email service
 // Added: 2026-05-22
 
-import { BOOKING_STATUS } from "@/lib/constants/booking";
+import {
+  BOOKING_STATUS,
+  EMAIL_NOTIFICATION_TYPE,
+} from "@/lib/constants/booking";
 import type { Booking } from "@/types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -38,7 +41,12 @@ vi.mock("@/lib/services/booking-events.service", () => ({
 }));
 
 // Import after mocks are set up
-import { sendAdminNotification } from "./email.service";
+import {
+  processDueEmailRetries,
+  sendAdminNotification,
+  sendBookingEmail,
+  sendChatEscalationNotification,
+} from "./email.service";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -164,6 +172,7 @@ describe("sendAdminNotification", () => {
     const insertArg = insertMock.mock.calls[0][0];
     expect(insertArg.status).toBe("failed");
     expect(insertArg.error_message).toBe("connection refused");
+    expect(insertArg.next_retry_at).toEqual(expect.any(String));
   });
 
   it("returns no error and skips send when ADMIN_EMAIL is not set", async () => {
@@ -193,5 +202,166 @@ describe("sendAdminNotification", () => {
     const insertArg = insertMock.mock.calls[0][0];
     expect(insertArg.status).toBe("failed");
     expect(insertArg.error_message).toBe("network timeout");
+    expect(insertArg.next_retry_at).toEqual(expect.any(String));
+  });
+});
+
+describe("sendBookingEmail", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+
+    const insertMock = vi.fn().mockResolvedValue({ error: null });
+    mockFrom.mockReturnValue({ insert: insertMock });
+  });
+
+  afterEach(() => {
+    Object.keys(process.env).forEach((k) => {
+      if (!(k in ORIGINAL_ENV)) delete process.env[k];
+    });
+    Object.assign(process.env, ORIGINAL_ENV);
+  });
+
+  it("renders the appointment reminder email with booking slot context", async () => {
+    mockSendMail.mockResolvedValue({});
+
+    await sendBookingEmail({
+      booking: {
+        ...makeBooking({ status: BOOKING_STATUS.CONFIRMED }),
+        slot: { date: "2026-07-02", start_time: "08:30:00" },
+      },
+      type: EMAIL_NOTIFICATION_TYPE.BOOKING_REMINDER,
+    });
+
+    const callArgs = mockSendMail.mock.calls[0][0];
+    expect(callArgs.subject).toBe("Appointment Reminder - Kish Auto Detailing");
+    expect(callArgs.html).toContain("Appointment Reminder");
+    expect(callArgs.html).toContain("Thursday, July 2");
+  });
+});
+
+describe("processDueEmailRetries", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+  });
+
+  afterEach(() => {
+    Object.keys(process.env).forEach((k) => {
+      if (!(k in ORIGINAL_ENV)) delete process.env[k];
+    });
+    Object.assign(process.env, ORIGINAL_ENV);
+  });
+
+  it("claims a due failed notification, resends it, and marks the same row sent", async () => {
+    mockSendMail.mockResolvedValue({});
+    const updates: Record<string, unknown>[] = [];
+    const row = {
+      id: "email-1",
+      booking_id: "booking-123",
+      recipient_email: "jane@example.com",
+      type: EMAIL_NOTIFICATION_TYPE.BOOKING_CONFIRMATION,
+      retry_count: 3,
+      booking: makeBooking(),
+    };
+
+    let callCount = 0;
+    mockFrom.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              not: vi.fn().mockReturnValue({
+                lte: vi.fn().mockReturnValue({
+                  lt: vi.fn().mockReturnValue({
+                    order: vi.fn().mockReturnValue({
+                      limit: vi.fn().mockResolvedValue({
+                        data: [row],
+                        error: null,
+                      }),
+                    }),
+                  }),
+                }),
+              }),
+            }),
+          }),
+        };
+      }
+
+      return {
+        update: vi.fn((payload) => {
+          updates.push(payload);
+          return {
+            eq: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                select: vi.fn().mockReturnValue({
+                  single: vi.fn().mockResolvedValue({
+                    data: { id: "email-1" },
+                    error: null,
+                  }),
+                }),
+              }),
+            }),
+          };
+        }),
+      };
+    });
+
+    const result = await processDueEmailRetries();
+
+    expect(result.error).toBeNull();
+    expect(result.data).toMatchObject({ checked: 1, claimed: 1, sent: 1 });
+    expect(updates[0]).toMatchObject({ status: "pending" });
+    expect(updates[1]).toMatchObject({
+      status: "sent",
+      retry_count: 4,
+      next_retry_at: null,
+    });
+  });
+});
+
+describe("sendChatEscalationNotification", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.ADMIN_EMAIL = "owner@kishautodetailing.com";
+  });
+
+  afterEach(() => {
+    Object.keys(process.env).forEach((k) => {
+      if (!(k in ORIGINAL_ENV)) delete process.env[k];
+    });
+    Object.assign(process.env, ORIGINAL_ENV);
+  });
+
+  it("emails the owner with escaped escalation details", async () => {
+    mockSendMail.mockResolvedValue({});
+
+    const result = await sendChatEscalationNotification({
+      sessionId: "session-1",
+      question: "<script>alert('x')</script>",
+      answer: "Owner should review.",
+    });
+
+    expect(result.error).toBeNull();
+    expect(mockSendMail).toHaveBeenCalledOnce();
+    const mail = mockSendMail.mock.calls[0][0];
+    expect(mail.to).toBe("owner@kishautodetailing.com");
+    expect(mail.subject).toBe("Chat Escalation - Kish Auto Detailing");
+    expect(mail.html).toContain("&lt;script&gt;");
+    expect(mail.html).not.toContain("<script>");
+  });
+
+  it("skips sending when ADMIN_EMAIL is not configured", async () => {
+    delete process.env.ADMIN_EMAIL;
+
+    const result = await sendChatEscalationNotification({
+      sessionId: "session-1",
+      question: "Question",
+      answer: "Answer",
+    });
+
+    expect(result.error).toBeNull();
+    expect(mockSendMail).not.toHaveBeenCalled();
   });
 });

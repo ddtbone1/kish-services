@@ -1,8 +1,9 @@
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { answerQuestion } from "@/lib/services/chat.service";
+import { sendChatEscalationNotification } from "@/lib/services/email.service";
 import { withRequestContext } from "@/lib/utils/with-request-context";
 import { chatQuestionSchema } from "@/lib/validations/chat";
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, after, type NextRequest } from "next/server";
 
 export async function POST(request: NextRequest) {
   return withRequestContext(request, async () => {
@@ -38,6 +39,16 @@ export async function POST(request: NextRequest) {
           { error: error ?? "Failed to process question" },
           { status: 500 },
         );
+      }
+
+      if (data.was_escalated) {
+        after(async () => {
+          await sendChatEscalationNotification({
+            sessionId: parsed.data.session_id,
+            question: parsed.data.question,
+            answer: data.answer,
+          });
+        });
       }
 
       return NextResponse.json({ data });

@@ -152,3 +152,19 @@ export interface FaqEntry {
   created_at: string;
   updated_at: string;
 }
+
+export type ChatEscalationStatus = "open" | "resolved";
+
+export interface ChatEscalation {
+  id: string;
+  session_id: string;
+  question: string;
+  answer: string;
+  confidence_score: number | null;
+  was_escalated: boolean;
+  escalation_status: ChatEscalationStatus;
+  owner_notes: string | null;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  created_at: string;
+}

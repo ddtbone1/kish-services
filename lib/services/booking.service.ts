@@ -5,7 +5,6 @@
 import {
   BOOKING_STATUS,
   VALID_STATUS_TRANSITIONS,
-  canCustomerCancel,
   type BookingStatus,
 } from "@/lib/constants/booking";
 import {
@@ -18,6 +17,7 @@ import { SERVICE_AREA_STATUS, getServiceArea } from "@/lib/constants/service-are
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { canCustomerCancelBooking } from "@/lib/utils/booking-policy";
 import type { CreateBookingInput } from "@/lib/validations/booking";
 import type { Booking, BookingWithItems, PublicBooking } from "@/types";
 
@@ -261,7 +261,7 @@ export async function cancelBookingByToken(
 
   const { data: current, error: fetchError } = await supabase
     .from("bookings")
-    .select("id, status")
+    .select("id, status, slot:availability_slots!slot_id(date, start_time)")
     .eq("reference_token", token)
     .single();
 
@@ -269,13 +269,17 @@ export async function cancelBookingByToken(
     return { data: null, error: "Booking not found" };
   }
 
+  const slot = Array.isArray(current.slot) ? current.slot[0] : current.slot;
+
   // Customer cancel eligibility comes from the shared action-policy (single
-  // source of truth with the client UI). Behaviour matches the prior
-  // VALID_STATUS_TRANSITIONS check: only pending/confirmed are cancellable.
-  if (!canCustomerCancel(current.status as BookingStatus)) {
+  // source of truth with the client UI): only customer-actionable statuses
+  // before the cancellation cutoff can be self-cancelled.
+  if (!canCustomerCancelBooking(current.status as BookingStatus, slot ?? null)) {
     return {
       data: null,
-      error: `Cannot cancel a booking with status '${current.status}'`,
+      error:
+        `Cannot cancel this booking online. Self-service cancellation is ` +
+        `available until ${CANCELLATION_POLICY.cutoffHours} hours before the appointment.`,
     };
   }
 

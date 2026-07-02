@@ -40,6 +40,7 @@ import {
 
 const BOOKING_ID = "booking-uuid-001";
 const REF_TOKEN = "550e8400-e29b-41d4-a716-446655440000";
+const FUTURE_SLOT = { date: "2099-05-22", start_time: "10:00:00" };
 
 function makePublicBooking(
   overrides: Partial<PublicBooking> = {},
@@ -269,7 +270,11 @@ describe("cancelBookingByToken", () => {
 
     // First call: fetch current status
     const singleFetch = vi.fn().mockResolvedValue({
-      data: { id: BOOKING_ID, status: BOOKING_STATUS.PENDING },
+      data: {
+        id: BOOKING_ID,
+        status: BOOKING_STATUS.PENDING,
+        slot: FUTURE_SLOT,
+      },
       error: null,
     });
     // Second call: update + select
@@ -322,7 +327,11 @@ describe("cancelBookingByToken", () => {
 
   it("returns error when cancellation is not allowed (e.g. completed → cancel)", async () => {
     const single = vi.fn().mockResolvedValue({
-      data: { id: BOOKING_ID, status: BOOKING_STATUS.COMPLETED },
+      data: {
+        id: BOOKING_ID,
+        status: BOOKING_STATUS.COMPLETED,
+        slot: FUTURE_SLOT,
+      },
       error: null,
     });
     mockAdminFrom.mockReturnValue({
@@ -334,12 +343,16 @@ describe("cancelBookingByToken", () => {
     const result = await cancelBookingByToken(REF_TOKEN);
 
     expect(result.data).toBeNull();
-    expect(result.error).toContain("Cannot cancel");
+    expect(result.error).toContain("Self-service cancellation");
   });
 
   it("returns error when cancellation is not allowed (e.g. declined → cancel)", async () => {
     const single = vi.fn().mockResolvedValue({
-      data: { id: BOOKING_ID, status: BOOKING_STATUS.DECLINED },
+      data: {
+        id: BOOKING_ID,
+        status: BOOKING_STATUS.DECLINED,
+        slot: FUTURE_SLOT,
+      },
       error: null,
     });
     mockAdminFrom.mockReturnValue({
@@ -351,7 +364,28 @@ describe("cancelBookingByToken", () => {
     const result = await cancelBookingByToken(REF_TOKEN);
 
     expect(result.data).toBeNull();
-    expect(result.error).toContain("Cannot cancel");
+    expect(result.error).toContain("Self-service cancellation");
+  });
+
+  it("returns error when the customer cancellation cutoff has passed", async () => {
+    const single = vi.fn().mockResolvedValue({
+      data: {
+        id: BOOKING_ID,
+        status: BOOKING_STATUS.PENDING,
+        slot: { date: "2020-05-22", start_time: "10:00:00" },
+      },
+      error: null,
+    });
+    mockAdminFrom.mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({ single }),
+      }),
+    });
+
+    const result = await cancelBookingByToken(REF_TOKEN);
+
+    expect(result.data).toBeNull();
+    expect(result.error).toContain("12 hours before");
   });
 });
 

@@ -252,6 +252,7 @@ export default async function BookingStatusPage({
         <BookingActions
           token={booking.reference_token}
           status={booking.status}
+          slot={slot}
         />
 
         <div className="flex justify-center">

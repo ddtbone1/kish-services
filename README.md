@@ -61,6 +61,7 @@ Open `.env.local` and fill in the values.
 | `SMTP_USER`                         | Yes      | SMTP username / sender email                         |
 | `SMTP_PASS`                         | Yes      | SMTP password or app password                        |
 | `ADMIN_EMAIL`                       | Yes      | Owner email for chatbot escalation alerts            |
+| `CRON_SECRET`                       | Yes      | Bearer token for protected job endpoints             |
 | `UPSTASH_REDIS_REST_URL`            | No       | Upstash REST URL for distributed API rate limiting   |
 | `UPSTASH_REDIS_REST_TOKEN`          | No       | Upstash REST token for distributed API rate limiting |
 | `NEXT_PUBLIC_APP_URL`               | No       | Deployed app URL, defaults to http://localhost:3000  |

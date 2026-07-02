@@ -10,11 +10,12 @@ export const Footer = () => {
             <h3 className="text-xl font-medium">Contact Us</h3>
             <div className="flex flex-col gap-3 text-white/60 text-sm leading-relaxed">
               <p>
-                123 Detailing Ave, Suite 101<br />
-                San Francisco, CA 94103
+                Agan Grandville Block 3 Lot 24<br />
+                Brgy. City Heights<br />
+                General Santos City, Philippines
               </p>
-              <p>hello@kishdetailing.com</p>
-              <p>+1 (555) 000-0000</p>
+              <p>kishdetailing@gmail.com</p>
+              <p>+63 985 204 9882</p>
             </div>
           </div>
 
@@ -37,7 +38,8 @@ export const Footer = () => {
               <Link href="/faq" className="hover:text-accent transition-colors">FAQ</Link>
               <Link href="/news" className="hover:text-accent transition-colors">News</Link>
               <Link href="/contact" className="hover:text-accent transition-colors">Contact us</Link>
-              <Link href="/privacy" className="hover:text-accent transition-colors">Privacy & cookies</Link>
+              <Link href="/terms" className="hover:text-accent transition-colors">Terms</Link>
+              <Link href="/privacy" className="hover:text-accent transition-colors">Privacy Notice</Link>
             </div>
           </div>
 

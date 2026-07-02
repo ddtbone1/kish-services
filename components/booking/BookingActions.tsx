@@ -15,22 +15,37 @@ import {
   RESCHEDULE_POLICY,
   WEATHER_POLICY,
 } from "@/lib/constants/policy";
+import {
+  canCustomerCancelBooking,
+  getCancellationCutoffInstant,
+  type BookingPolicySlot,
+} from "@/lib/utils/booking-policy";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 interface BookingActionsProps {
   token: string;
   status: BookingStatus;
+  slot: BookingPolicySlot | null;
 }
 
-export function BookingActions({ token, status }: BookingActionsProps) {
+export function BookingActions({ token, status, slot }: BookingActionsProps) {
   const router = useRouter();
   const [cancelling, setCancelling] = useState(false);
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const showCancel = canCustomerCancel(status);
+  const showCancel = canCustomerCancelBooking(status, slot);
   const showReschedule = canCustomerReschedule(status);
+  const cutoffLabel = slot
+    ? getCancellationCutoffInstant(slot).toLocaleString("en-US", {
+        timeZone: "Asia/Manila",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : null;
 
   if (!showCancel && !showReschedule) return null;
 
@@ -76,6 +91,12 @@ export function BookingActions({ token, status }: BookingActionsProps) {
       <div className="flex flex-wrap gap-3">
         <div className="basis-full text-xs text-muted-foreground leading-relaxed">
           <p>{CANCELLATION_POLICY.text}</p>
+          {canCustomerCancel(status) && !showCancel && cutoffLabel && (
+            <p>
+              Online cancellation closed on {cutoffLabel}. Please message us if
+              you need help.
+            </p>
+          )}
           <p>{RESCHEDULE_POLICY.text}</p>
           <p>{WEATHER_POLICY.text}</p>
           <p>{NO_SHOW_POLICY.text}</p>

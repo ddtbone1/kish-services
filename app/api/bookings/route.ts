@@ -7,10 +7,16 @@ import { logger } from "@/lib/logger";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { assessBookingRisk, createBooking } from "@/lib/services/booking.service";
 import {
+  EMAIL_NOTIFICATION_TYPE,
+} from "@/lib/constants/booking";
+import {
   BOOKING_EVENT_TYPE,
   logBookingEvent,
 } from "@/lib/services/booking-events.service";
-import { sendAdminNotification } from "@/lib/services/email.service";
+import {
+  sendAdminNotification,
+  sendBookingEmail,
+} from "@/lib/services/email.service";
 import { getSlotDateById } from "@/lib/services/availability.service";
 import { withRequestContext } from "@/lib/utils/with-request-context";
 import { createBookingSchema } from "@/lib/validations/booking";
@@ -152,18 +158,21 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // Alert the owner about the new booking (fire-and-forget).
-      // Customer email is deferred — sent by the owner's status-change action
-      // (BOOKING_CONFIRMED, BOOKING_DECLINED, etc.) so the customer only hears
-      // once the booking has been reviewed, not immediately on submission.
+      // Alert both parties by email only. The customer acknowledgement records
+      // that the request was received; later owner status actions still send
+      // confirmed/declined lifecycle emails.
       const bookingForEmail: Booking = { ...data, owner_notes: null };
       // Defer with after() so the SMTP send + retry backoff completes on
       // serverless instead of being cut off when the function suspends.
       after(async () => {
         try {
+          await sendBookingEmail({
+            booking: bookingForEmail,
+            type: EMAIL_NOTIFICATION_TYPE.BOOKING_CONFIRMATION,
+          });
           await sendAdminNotification(bookingForEmail);
         } catch (err) {
-          logger.error("sendAdminNotification fire-and-forget failed", {
+          logger.error("booking notification fire-and-forget failed", {
             error: String(err),
           });
         }

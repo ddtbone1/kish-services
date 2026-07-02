@@ -2,7 +2,10 @@
 // Purpose: Unit tests for POST /api/bookings — validation, idempotency, status mapping
 // Updated: 2026-06-25
 
-import { BOOKING_STATUS } from "@/lib/constants/booking";
+import {
+  BOOKING_STATUS,
+  EMAIL_NOTIFICATION_TYPE,
+} from "@/lib/constants/booking";
 import type { PublicBooking } from "@/types";
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -162,7 +165,7 @@ describe("POST /api/bookings", () => {
     mockStoreIdempotencyKey.mockResolvedValue(undefined);
   });
 
-  it("returns 201 and notifies owner but does NOT email customer on submission", async () => {
+  it("returns 201 and emails the customer acknowledgement plus owner alert", async () => {
     mockCreateBooking.mockResolvedValue({
       data: makeBooking(),
       error: null,
@@ -174,8 +177,10 @@ describe("POST /api/bookings", () => {
     expect(res.status).toBe(201);
     const json = await res.json();
     expect(json.data.id).toBe("booking-001");
-    // Customer email is deferred until owner confirms/declines — not sent on submission
-    expect(mockSendBookingEmail).not.toHaveBeenCalled();
+    expect(mockSendBookingEmail).toHaveBeenCalledWith({
+      booking: expect.objectContaining({ id: "booking-001" }),
+      type: EMAIL_NOTIFICATION_TYPE.BOOKING_CONFIRMATION,
+    });
     expect(mockSendAdminNotification).toHaveBeenCalledOnce();
   });
 

@@ -9,7 +9,9 @@ import {
   CalendarDays,
   ClipboardList,
   LogOut,
+  MessageCircleWarning,
   MessageSquare,
+  Package,
   Sparkles,
 } from "lucide-react";
 import Link from "next/link";
@@ -29,9 +31,21 @@ const SIDEBAR_LINKS = [
     exact: false,
   },
   {
+    label: "Services",
+    href: "/dashboard/services",
+    icon: Package,
+    exact: false,
+  },
+  {
     label: "FAQ",
     href: "/dashboard/faq",
     icon: MessageSquare,
+    exact: false,
+  },
+  {
+    label: "Questions",
+    href: "/dashboard/chats",
+    icon: MessageCircleWarning,
     exact: false,
   },
 ] as const;
